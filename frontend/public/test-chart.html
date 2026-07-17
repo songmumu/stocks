@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"></script>
+</head>
+<body>
+  <div id="card" style="background:#fff;border:1px solid #eee;padding:16px;width:800px;margin:20px">
+    <div class="k-body" style="position:relative;min-height:460px">
+      <div id="chart" class="k-chart" style="width:100%;height:460px"></div>
+    </div>
+  </div>
+  <script>
+    const dates = ["2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-03","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13"];
+    const candleData = [[4067.16,4057.74,4045.69,4093.04],[4061.46,4075.1,4032.58,4089.57],[4068.34,4083.97,4059.91,4107.05],[4053.67,4057.78,4043.43,4080.72],[4044.83,4027.74,4015.06,4078.93],[3938.71,3959.34,3927.85,4007.49],[3977.54,4010.03,3955.91,4010.87],[3985.12,3993.23,3963.44,4006.31],[3979.71,3987.01,3958.44,3997.48],[4017.86,4031.51,4008.18,4060.27],[4053.58,4096.47,4051.07,4097.17],[4094.21,4091.89,4077.87,4103.93],[4074.29,4108.08,4073.73,4109.96],[4094.23,4090.48,4080.29,4117.45],[4093.95,4163.1,4070.17,4164.42],[4153.59,4106.25,4085.59,4175.35],[4090.1,4110.81,4075.49,4117.28],[4103.48,4120.28,4093.01,4133.1],[4098.69,4027.26,4007.86,4099.78],[4026.69,4073.9,3992.55,4075.33],[4058.17,4094.4,4052.17,4097.42],[4090.76,4112.45,4087.54,4143.31],[4054.09,4028.9,4019.21,4093.68],[4031.34,4043.64,4027.26,4073.88],[4059.19,4041.24,4005.41,4060.07],[4019.49,3990.24,3971.71,4028.51],[3996.81,3970.88,3967.91,4016.03],[3977.55,4036.59,3938.88,4040.54],[4031.54,3996.16,3995.81,4074.83],[3966.02,3913.79,3900.67,3983.05]];
+    const vols = [676.03,642.24,668.45,621.19,662.92,659.29,576.57,598.69,568.55,743.13,678.91,615.67,608.08,658.12,743.70,709.00,644.53,670.46,660.11,659.20,598.41,672.33,656.23,602.01,590.36,514.45,496.23,553.06,627.45,590.91];
+
+    // MA 计算
+    function calcMA(bars, days) {
+      const result = [];
+      for (let i = 0; i < bars.length; i++) {
+        if (i < days - 1) { result.push(null); continue; }
+        let sum = 0;
+        for (let j = i - days + 1; j <= i; j++) sum += bars[j][1];
+        result.push(+(sum / days).toFixed(2));
+      }
+      return result;
+    }
+    const ma5 = calcMA(candleData, 5);
+    const ma20 = calcMA(candleData, 20);
+    const ma60 = calcMA(candleData, 60);
+
+    // ⭐ 完整复制 Dashboard.vue 的 ECharts 配置
+    const chart = echarts.init(document.getElementById('chart'));
+    console.log('container size:', document.getElementById('chart').offsetWidth, 'x', document.getElementById('chart').offsetHeight);
+    chart.setOption({
+      animation: false,
+      tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+      legend: { data: ['MA5', 'MA20', 'MA60'], top: 4, itemGap: 20 },
+      grid: [
+        { left: 60, right: 50, top: 40, height: '60%' },
+        { left: 60, right: 50, top: '76%', height: '14%' },
+      ],
+      xAxis: [
+        {
+          type: 'category',
+          data: dates,
+          boundaryGap: false,
+          axisLine: { onZero: false, lineStyle: { color: '#ddd' } },
+          axisLabel: {
+            fontSize: 11, color: '#999',
+            formatter: (val) => val.slice(5),
+            interval: Math.floor(dates.length / 8),
+          },
+          splitLine: { show: false },
+          gridIndex: 0,
+        },
+        {
+          type: 'category',
+          data: dates,
+          boundaryGap: false,
+          axisLabel: { show: false },
+          axisLine: { lineStyle: { color: '#ddd' } },
+          gridIndex: 1,
+        },
+      ],
+      yAxis: [
+        {
+          scale: true, gridIndex: 0,
+          splitLine: { lineStyle: { type: 'dashed', color: '#eee' } },
+          axisLabel: { color: '#999', fontSize: 11,
+            formatter: (v) => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v.toFixed(0)
+          },
+          position: 'right',
+        },
+        {
+          scale: true, gridIndex: 1, splitNumber: 2,
+          splitLine: { show: false },
+          axisLabel: { color: '#999', fontSize: 10,
+            formatter: (v) => v >= 1 ? v.toFixed(1) + '亿' : (v * 10000).toFixed(0)
+          },
+          position: 'right',
+        },
+      ],
+      dataZoom: [],  // 空数组，无 dataZoom
+      series: [
+        { name: 'K线', type: 'candlestick', data: candleData, itemStyle: { color: '#ef232a', color0: '#14b143', borderColor: '#ef232a', borderColor0: '#14b143' } },
+        { name: 'MA5', type: 'line', data: ma5, smooth: true, symbol: 'none', lineStyle: { width: 1.2, color: '#ffa726' }, connectNulls: true },
+        { name: 'MA20', type: 'line', data: ma20, smooth: true, symbol: 'none', lineStyle: { width: 1.2, color: '#ab47bc' }, connectNulls: true },
+        { name: 'MA60', type: 'line', data: ma60, smooth: true, symbol: 'none', lineStyle: { width: 1.2, color: '#42a5f5' }, connectNulls: true },
+        {
+          name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1,
+          data: vols.map((v, i) => ({
+            value: v,
+            itemStyle: { color: candleData[i][1] >= candleData[i][0] ? 'rgba(239,35,42,.45)' : 'rgba(20,177,67,.45)' }
+          })),
+        },
+      ],
+    });
+
+    setTimeout(() => {
+      const opt = chart.getOption();
+      console.log('dataZoom:', JSON.stringify(opt.dataZoom));
+      console.log('xAxis[0]:', opt.xAxis[0].min, opt.xAxis[0].max, opt.xAxis[0].data.length, 'pts');
+      console.log('xAxis[1]:', opt.xAxis[1].min, opt.xAxis[1].max, opt.xAxis[1].data.length, 'pts');
+    }, 500);
+  </script>
+</body>
+</html>

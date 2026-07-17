@@ -1,0 +1,50 @@
+[2m21:15:29[22m [31m[1m[vite][22m[39m [31mInternal server error: Element is missing end tag.[39m
+  Plugin: [35mvite:vue[39m
+  File: [36mC:/Users/admin/.qclaw/workspace-v733kxt9elzfv7u1/trading-system/frontend/src/views/StockPool.vue[39m:84:11
+[33m  82 |  
+  83 |          <div class="card-body">
+  84 |            <template v-if="quotes[stock.code]">
+     |             ^
+  85 |              <!-- 场外基金：暂无实时行情 -->
+  86 |              <div v-if="quotes[stock.code].no_intraday" class="quote-no-intraday">[39m
+      at createCompilerError (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:1378:17)
+      at emitError (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:3014:5)
+      at Object.onclosetag (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:2381:13)
+      at Tokenizer.stateInClosingTagName (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:799:16)
+      at Tokenizer.parse (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:1157:16)
+      at Object.baseParse (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:3053:13)
+      at Object.parse (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-dom\dist\compiler-dom.cjs.js:910:23)
+      at Object.parse$1 [as parse] (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-sfc\dist\compiler-sfc.cjs.js:1824:24)
+      at createDescriptor (file:///C:/Users/admin/.qclaw/workspace-v733kxt9elzfv7u1/trading-system/frontend/node_modules/@vitejs/plugin-vue/dist/index.mjs:71:43)
+      at handleHotUpdate (file:///C:/Users/admin/.qclaw/workspace-v733kxt9elzfv7u1/trading-system/frontend/node_modules/@vitejs/plugin-vue/dist/index.mjs:2198:26)
+[2m21:15:58[22m [31m[1m[vite][22m[39m [31mInternal server error: Element is missing end tag.[39m
+      at createCompilerError (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:1378:17)
+      at emitError (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:3014:5)
+      at Object.onclosetag (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:2381:13)
+      at Tokenizer.stateInClosingTagName (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:799:16)
+      at Tokenizer.parse (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:1157:16)
+      at Object.baseParse (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:3053:13)
+      at Object.parse (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-dom\dist\compiler-dom.cjs.js:910:23)
+      at Object.parse$1 [as parse] (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-sfc\dist\compiler-sfc.cjs.js:1824:24)
+      at createDescriptor (file:///C:/Users/admin/.qclaw/workspace-v733kxt9elzfv7u1/trading-system/frontend/node_modules/@vitejs/plugin-vue/dist/index.mjs:71:43)
+      at handleHotUpdate (file:///C:/Users/admin/.qclaw/workspace-v733kxt9elzfv7u1/trading-system/frontend/node_modules/@vitejs/plugin-vue/dist/index.mjs:2198:26)
+[2m21:16:09[22m [31m[1m[vite][22m[39m [31mInternal server error: Element is missing end tag.[39m
+  Plugin: [35mvite:vue[39m
+  File: [36mC:/Users/admin/.qclaw/workspace-v733kxt9elzfv7u1/trading-system/frontend/src/views/StockPool.vue[39m:84:11
+[33m  82 |  
+  83 |          <div class="card-body">
+  84 |            <template v-if="quotes[stock.code]">
+     |             ^
+  85 |              <!-- 场外基金：暂无实时行情 -->
+  86 |              <div v-if="quotes[stock.code].no_intraday" class="quote-no-intraday">[39m
+      at createCompilerError (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:1378:17)
+      at emitError (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:3014:5)
+      at Object.onclosetag (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:2381:13)
+      at Tokenizer.stateInClosingTagName (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:799:16)
+      at Tokenizer.parse (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:1157:16)
+      at Object.baseParse (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-core\dist\compiler-core.cjs.js:3053:13)
+      at Object.parse (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-dom\dist\compiler-dom.cjs.js:910:23)
+      at Object.parse$1 [as parse] (C:\Users\admin\.qclaw\workspace-v733kxt9elzfv7u1\trading-system\frontend\node_modules\@vue\compiler-sfc\dist\compiler-sfc.cjs.js:1824:24)
+      at createDescriptor (file:///C:/Users/admin/.qclaw/workspace-v733kxt9elzfv7u1/trading-system/frontend/node_modules/@vitejs/plugin-vue/dist/index.mjs:71:43)
+      at handleHotUpdate (file:///C:/Users/admin/.qclaw/workspace-v733kxt9elzfv7u1/trading-system/frontend/node_modules/@vitejs/plugin-vue/dist/index.mjs:2198:26)
+^C
