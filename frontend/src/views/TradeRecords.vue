@@ -221,9 +221,11 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="交易笔数" width="90" align="center">
+        <el-table-column label="交易记录" width="100" align="center" fixed="right">
           <template #default="{ row }">
-            <span style="color: #666;">{{ row.tradeCount }} 笔</span>
+            <el-button link size="small" type="primary" @click="openClosedTradeHistory(row)">
+              {{ row.tradeCount }} 笔 ▸
+            </el-button>
           </template>
         </el-table-column>
         <el-table-column label="清仓日期" width="110" align="center">
@@ -1312,12 +1314,12 @@ function calcHoldingCost(code) {
   }
 }
 
-// 持仓汇总
+// 持仓汇总（只显示有持仓的，已清仓的在清仓汇总里显示）
 const holdings = computed(() => {
   const codes = [...new Set(trades.value.map(t => t.code))]
   return codes
     .map(code => calcHoldingCost(code))
-    .filter(h => h.netQty !== 0 || trades.value.some(t => t.code === h.code && t.trade_type === 'sell'))
+    .filter(h => h.netQty > 0)  // 只显示有持仓的
     .sort((a, b) => b.marketVal - a.marketVal)
 })
 
@@ -1532,7 +1534,10 @@ function renderEquityChart() {
       axisLine: { lineStyle: { color: '#eee' } }, axisTick: { show: false },
     },
     yAxis: {
-      type: 'value', axisLabel: {
+      type: 'value',
+      min: 0,
+      max: Math.max(...values, costLine) * 1.05,  // 包含成本线，留 5% 边距
+      axisLabel: {
         fontSize: 11, color: '#999',
         formatter: v => v >= 10000 ? (v / 10000).toFixed(1) + 'w' : v.toFixed(0),
       },
@@ -1918,6 +1923,27 @@ function openTradeHistoryDialog(row) {
   tradeHistory.value = {
     visible: true,
     title: `${row.name || row.code}（${row.code}） 交易记录 · 共 ${rows.length} 笔`,
+    rows,
+    buyTotal,
+    sellTotal,
+    netTotal: buyTotal - sellTotal,
+  }
+}
+
+// ─── 清仓品种交易记录 ────────────────────────────────────────────
+function openClosedTradeHistory(row) {
+  const rows = trades.value
+    .filter(t => t.code === row.code)
+    .sort((a, b) => b.trade_date.localeCompare(a.trade_date) || (b.id - a.id))
+    .map(t => ({ ...t, isFund: row.isFund }))
+  let buyTotal = 0, sellTotal = 0
+  for (const t of rows) {
+    if (t.trade_type === 'buy') buyTotal += t.price * t.quantity + (t.fee || 0)
+    else sellTotal += t.price * t.quantity - (t.fee || 0)
+  }
+  tradeHistory.value = {
+    visible: true,
+    title: `${row.name || row.code}（${row.code}） 清仓交易记录 · 共 ${rows.length} 笔`,
     rows,
     buyTotal,
     sellTotal,

@@ -1,6 +1,6 @@
 """数据 schema"""
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import BaseModel, Field, ConfigDict
+from typing import Optional, Literal
 from datetime import date, datetime
 
 
@@ -162,3 +162,42 @@ class CustomIndexOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ── 用户管理（后台） ──
+
+class LoginRequest(BaseModel):
+    username: str = Field(..., min_length=2, max_length=32)
+    password: str = Field(..., min_length=6, max_length=64)
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type:   str = "bearer"
+    user:         "UserOut"
+
+class UserBase(BaseModel):
+    username:  str                       = Field(..., min_length=2, max_length=32)
+    role:      Literal["admin", "user"]  = "user"
+    is_active: bool                      = True
+
+class UserCreate(UserBase):
+    password: str = Field(..., min_length=6, max_length=64)
+
+class UserUpdate(BaseModel):
+    role:      Optional[Literal["admin", "user"]] = None
+    is_active: Optional[bool] = None
+    password:  Optional[str]   = Field(None, min_length=6, max_length=64)
+
+class UserOut(UserBase):
+    id:            int
+    last_login_at: Optional[datetime] = None
+    created_at:    datetime
+    updated_at:    datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(..., min_length=6, max_length=64)
+    new_password: str = Field(..., min_length=6, max_length=64)
+
+LoginResponse.model_rebuild()

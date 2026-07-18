@@ -21,14 +21,32 @@
     <el-card shadow="never">
       <div class="k-header">
         <div class="k-tabs">
-          <button
+          <div
             v-for="tab in indexTabs"
             :key="tab.value"
-            :class="['k-tab', { active: selectedIndex === tab.value }]"
-            @click="onTabChange(tab.value)"
+            :class="['k-tab-wrapper', { active: selectedIndex === tab.value }]"
           >
-            {{ tab.label }}
-          </button>
+            <button
+              :class="['k-tab', { active: selectedIndex === tab.value }]"
+              @click="onTabChange(tab.value)"
+            >
+              {{ tab.label }}
+            </button>
+            <el-button
+              v-if="!tab.isDefault"
+              link
+              size="small"
+              type="danger"
+              class="tab-delete"
+              @click.stop="removeIndexTab(tab.value)"
+              title="删除"
+            >
+              ×
+            </el-button>
+          </div>
+          <el-button link size="small" type="primary" @click="showAddIndexDialog" class="add-tab-btn">
+            + 添加
+          </el-button>
         </div>
         <el-select v-model="kDays" size="small" style="width: 110px;" @change="loadIndexHistory">
           <el-option label="30日" :value="30" />
@@ -61,20 +79,88 @@
     <div v-if="lastUpdate" class="update-time">
       最后更新：{{ lastUpdate }}
     </div>
+
+    <!-- 添加指数弹窗 -->
+    <el-dialog v-model="addIndexDialog.visible" title="添加指数" width="400px">
+      <el-form label-width="80px">
+        <el-form-item label="选择指数">
+          <el-select v-model="selectedIndexToAdd" placeholder="请选择要添加的指数" style="width: 100%;">
+            <el-option
+              v-for="idx in AVAILABLE_INDICES.filter(i => !indexTabs.some(t => t.value === i.value))"
+              :key="idx.value"
+              :label="idx.label"
+              :value="idx.value"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="addIndexDialog.visible = false">取消</el-button>
+        <el-button type="primary" @click="confirmAddIndex">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
 import * as echarts from 'echarts'
 import { getCurrentIndices, getIndexHistory } from '../api/index.js'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
-const indexTabs = [
+// 默认指数（不可删除）
+const DEFAULT_INDEX_TABS = [
+  { label: '上证指数', value: 'sh', isDefault: true },
+  { label: '深证成指', value: 'sz', isDefault: true },
+  { label: '创业板指', value: 'cy', isDefault: true },
+  { label: '沪深300', value: 'hs300', isDefault: true },
+]
+
+// 可用指数列表（用于添加）
+const AVAILABLE_INDICES = [
   { label: '上证指数', value: 'sh' },
   { label: '深证成指', value: 'sz' },
   { label: '创业板指', value: 'cy' },
   { label: '沪深300', value: 'hs300' },
+  { label: '中证500', value: 'zz500' },
+  { label: '科创50', value: 'kc50' },
+  { label: '恒生指数', value: 'hsi' },
+  { label: '恒生科技', value: 'hstech' },
+  { label: '纳斯达克', value: 'nasdaq' },
+  { label: '标普500', value: 'sp500' },
+  { label: '道琼斯', value: 'dow' },
 ]
+
+// 从 localStorage 加载自定义指数
+function loadCustomIndices() {
+  try {
+    const saved = localStorage.getItem('dashboard_custom_indices')
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('加载自定义指数失败', e)
+  }
+  return []
+}
+
+// 保存自定义指数到 localStorage
+function saveCustomIndices(customTabs) {
+  try {
+    localStorage.setItem('dashboard_custom_indices', JSON.stringify(customTabs))
+  } catch (e) {
+    console.error('保存自定义指数失败', e)
+  }
+}
+
+const customIndices = ref(loadCustomIndices())
+const addIndexDialog = ref({ visible: false })
+const selectedIndexToAdd = ref('')
+
+const indexTabs = computed(() => {
+  const customs = customIndices.value.map(c => ({ ...c, isDefault: false }))
+  return [...DEFAULT_INDEX_TABS, ...customs]
+})
 
 const indices = ref([])
 const selectedIndex = ref('sh')
@@ -334,6 +420,60 @@ function onTabChange(val) {
   loadIndexHistory()
 }
 
+function showAddIndexDialog() {
+  selectedIndexToAdd.value = ''
+  addIndexDialog.value.visible = true
+}
+
+function confirmAddIndex() {
+  if (!selectedIndexToAdd.value) {
+    ElMessage.warning('请选择一个指数')
+    return
+  }
+  const idx = AVAILABLE_INDICES.find(i => i.value === selectedIndexToAdd.value)
+  if (!idx) return
+  
+  // 检查是否已存在
+  if (indexTabs.value.some(t => t.value === idx.value)) {
+    ElMessage.warning('该指数已存在')
+    return
+  }
+  
+  customIndices.value.push({ label: idx.label, value: idx.value })
+  saveCustomIndices(customIndices.value)
+  addIndexDialog.value.visible = false
+  ElMessage.success(`已添加 ${idx.label}`)
+  
+  // 自动切换到新添加的指数
+  selectedIndex.value = idx.value
+  loadIndexHistory()
+}
+
+async function removeIndexTab(value) {
+  const tab = indexTabs.value.find(t => t.value === value)
+  if (!tab) return
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定删除 "${tab.label}" 吗？`,
+      '删除指数',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  
+  customIndices.value = customIndices.value.filter(i => i.value !== value)
+  saveCustomIndices(customIndices.value)
+  ElMessage.success('已删除')
+  
+  // 如果删除的是当前选中的，切换到第一个默认指数
+  if (selectedIndex.value === value) {
+    selectedIndex.value = 'sh'
+    loadIndexHistory()
+  }
+}
+
 onMounted(() => {
   loadIndices()
   loadIndexHistory()
@@ -447,5 +587,64 @@ onBeforeUnmount(() => {
   color: #bbb;
   margin-top: 10px;
   text-align: right;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.k-tab-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+}
+
+.k-tab-wrapper .k-tab {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.k-tab-wrapper .tab-delete {
+  padding: 5px 6px;
+  height: auto;
+  font-size: 14px;
+  line-height: 1;
+  border: 1px solid #e8e8ee;
+  border-left: none;
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+  background: #fff;
+  color: #999;
+  opacity: 0;
+  transition: all 0.15s;
+}
+
+.k-tab-wrapper:hover .tab-delete {
+  opacity: 1;
+}
+
+.k-tab-wrapper .tab-delete:hover {
+  color: #f56c6c;
+  background: #fef0f0;
+}
+
+.k-tab-wrapper.active .tab-delete {
+  border-color: #4a6cf7;
+  background: #4a6cf7;
+  color: rgba(255,255,255,0.8);
+}
+
+.k-tab-wrapper.active .tab-delete:hover {
+  color: #fff;
+  background: #f56c6c;
+}
+
+.add-tab-btn {
+  margin-left: 4px;
+  padding: 5px 10px;
 }
 </style>

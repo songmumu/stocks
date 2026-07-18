@@ -352,11 +352,14 @@ def search_stocks(keyword: str) -> list[dict]:
 
 def verify_index(code: str) -> dict | None:
     """
-    用东方财富搜索 API 按代码精确查找指数（SecurityType=5）。
-    注意：type=14 同时返回同名股票和指数，必须用 SecurityType=5 过滤。
+    验证指数代码，返回指数名称。
+    优先用东方财富搜索 API（SecurityType=5/11），失败时 fallback 到腾讯 API。
+    覆盖场景：国证指数（如 399303 国证2000）在东方财富可能搜不到，但腾讯有数据。
     """
     if not code:
         return None
+
+    # 1. 尝试东方财富（宽基/行业指数）
     url = "https://searchapi.eastmoney.com/api/suggest/get"
     params = {
         "input": code,
@@ -380,9 +383,56 @@ def verify_index(code: str) -> dict | None:
                     "code": item["Code"],
                     "name": item.get("Name", ""),
                 }
-        return None
     except Exception:
-        return None
+        pass
+
+    # 2. Fallback：用腾讯 API 验证（覆盖国证指数等东方财富未收录的指数）
+    # 国证指数通常是 sz 开头（399xxx, 980xxx）
+    for prefix in ["sz", "sh"]:
+        secid = prefix + code
+        url = f"https://qt.gtimg.cn/q={secid}"
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=8)
+            if r.status_code == 200 and 'pv_none_match' not in r.text:
+                # 解析腾讯返回格式: v_sz399303="51~国证2000~399303~..."
+                if '~' in r.text:
+                    parts = r.text.split('~')
+                    if len(parts) >= 3:
+                        name = _decode_uescape(parts[1])
+                        returned_code = parts[2]
+                        if returned_code == code and name:
+                            return {"code": code, "name": name}
+        except Exception:
+            pass
+
+    # 3. Fallback：中证指数 CSI API（覆盖 930xxx 等中证系列指数）
+    # 中证指数代码通常是 930xxx、931xxx、932xxx 等
+    if code.startswith(("930", "931", "932", "933", "934", "935", "936", "937", "938", "939")):
+        try:
+            csi_url = "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+            csi_params = {
+                "indexCode": code,
+                "startDate": "20250101",  # 近期数据即可
+                "endDate": "20251231",
+            }
+            csi_headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Referer": "https://www.csindex.com.cn/",
+                "Accept": "application/json",
+            }
+            r = requests.get(csi_url, params=csi_params, headers=csi_headers, timeout=10)
+            if r.status_code == 200:
+                csi_json = r.json()
+                items = csi_json.get("data", [])
+                if items and len(items) > 0:
+                    # 从第一条数据获取指数名称
+                    name = items[0].get("indexNameCn", "")
+                    if name:
+                        return {"code": code, "name": name}
+        except Exception:
+            pass
+
+    return None
 
 
 # ─────────── 工具 ───────────

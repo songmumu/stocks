@@ -15,7 +15,14 @@ def current_indices():
 
 @router.get("/index/history")
 def index_history(code: str = Query("sh", description="sh/sz/cy/hs300"), days: int = Query(120, ge=30, le=720)):
-    """获取大盘指数历史 K 线"""
+    """获取大盘指数历史 K 线（查询参数方式）"""
+    data = fetch_index_history(code, days)
+    return {"code": code, "bars": data}
+
+
+@router.get("/index-history/{code}")
+def index_history_path(code: str, days: int = Query(90, ge=30, le=720)):
+    """获取大盘指数历史 K 线（路径参数方式，兼容前端）"""
     data = fetch_index_history(code, days)
     return {"code": code, "bars": data}
 

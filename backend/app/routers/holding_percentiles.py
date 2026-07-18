@@ -19,7 +19,6 @@ def _to_out(row: HoldingPercentile) -> dict:
         "code": row.code,
         "pe_pct": row.pe_pct,
         "pb_pct": row.pb_pct,
-        "nav_pct": row.nav_pct,
         "note": row.note or "",
         "updated_at": row.updated_at,
     }
@@ -43,7 +42,7 @@ def get_one(code: str):
     try:
         row = db.query(HoldingPercentile).filter(HoldingPercentile.code == code).first()
         if not row:
-            return {"code": code, "pe_pct": None, "pb_pct": None, "nav_pct": None,
+            return {"code": code, "pe_pct": None, "pb_pct": None,
                     "note": "", "updated_at": None}
         return _to_out(row)
     finally:
@@ -61,7 +60,6 @@ def upsert(code: str, payload: HoldingPercentileUpdate):
                 code=code,
                 pe_pct=payload.pe_pct,
                 pb_pct=payload.pb_pct,
-                nav_pct=payload.nav_pct,
                 note=payload.note or "",
             )
             db.add(row)
@@ -69,7 +67,6 @@ def upsert(code: str, payload: HoldingPercentileUpdate):
             # 只更新传入的非空字段
             if payload.pe_pct  is not None: row.pe_pct  = payload.pe_pct
             if payload.pb_pct  is not None: row.pb_pct  = payload.pb_pct
-            if payload.nav_pct is not None: row.nav_pct = payload.nav_pct
             if payload.note    is not None: row.note    = payload.note
         db.commit()
         db.refresh(row)

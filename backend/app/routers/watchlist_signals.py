@@ -18,7 +18,7 @@ from app.services.valuation_service import (
     CSI_INDICES,
     WATCHED_INDICES,
 )
-from app.services.eastmoney_service import fetch_realtime_quote
+from app.services.eastmoney_service import fetch_realtime_quote, verify_index
 
 router = APIRouter(prefix="/api/valuation/watchlist", tags=["估值"])
 
@@ -54,6 +54,19 @@ def _infer_type(code: str, stock_type: str) -> str:
     if code.startswith(("510", "511", "513", "515", "588", "159")):
         return "etf"
     return "stock"
+
+
+def _get_index_name(index_code: str) -> str:
+    """获取指数名称，优先从本地映射，否则尝试验证API"""
+    if index_code in _INDEX_NAMES:
+        return _INDEX_NAMES[index_code]
+    # 尝试从 verify_index 获取
+    verified = verify_index(index_code)
+    if verified and verified.get("name"):
+        # 缓存到本地映射
+        _INDEX_NAMES[index_code] = verified["name"]
+        return verified["name"]
+    return index_code
 
 
 def _build_signal(item: WatchlistStock, db: Session) -> dict:
@@ -101,7 +114,7 @@ def _build_signal(item: WatchlistStock, db: Session) -> dict:
         watch_ds = "linked" if ds == "manual" else f"linked_{ds}"
         return {
             "id": item.id, "type": stype, "code": code, "name": name,
-            "index_code": index_code, "index_name": _INDEX_NAMES.get(index_code, index_code),
+            "index_code": index_code, "index_name": _get_index_name(index_code),
             "signal": pct_v, "signal_label": f"{pct_v:.1f}%",
             "band": band, "band_label": _BAND_LABELS[band],
             "nav": nav, "price": price, "change_pct": chg, "pe": pe, "pb": pb,
@@ -116,7 +129,7 @@ def _build_signal(item: WatchlistStock, db: Session) -> dict:
     # 已关联但指数尚未填分位
     return {
         "id": item.id, "type": stype, "code": code, "name": name,
-        "index_code": index_code, "index_name": _INDEX_NAMES.get(index_code, index_code),
+        "index_code": index_code, "index_name": _get_index_name(index_code),
         "signal": None, "signal_label": "指数未填分位",
         "band": "unknown", "band_label": "指数未填分位",
         "nav": nav, "price": price, "change_pct": chg, "pe": pe, "pb": pb,

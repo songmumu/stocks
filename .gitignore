@@ -70,3 +70,11 @@ htmlcov/
 # Backup files
 *.bak
 *.backup
+
+# Dev probes / throwaway scripts
+probe_*.py
+_migrate_*.py
+
+# Local design artifacts
+交易系统蓝图.html
+*蓝图.html

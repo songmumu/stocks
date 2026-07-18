@@ -82,3 +82,27 @@ class HiddenIndex(Base):
     name = Column(String(64), nullable=False)                 # 删除时快照
     source = Column(String(16), default="custom")             # custom / csi / tencent
     created_at = Column(DateTime, server_default=func.now())
+
+
+class PortfolioPeakProfit(Base):
+    """持仓历史最高浮盈记录（单标的建仓以来）"""
+    __tablename__ = "portfolio_peak_profits"
+
+    code = Column(String(12), primary_key=True)               # 股票/ETF 代码
+    peak_profit = Column(Float, default=0.0)                  # 历史最高浮盈金额
+    peak_date = Column(Date, nullable=True)                   # 达到最高浮盈的日期
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class User(Base):
+    """后台用户（后台管理）"""
+    __tablename__ = "users"
+
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    username      = Column(String(32), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)        # passlib PBKDF2
+    role          = Column(String(16), default="user")         # admin / user
+    is_active     = Column(Integer, default=1)                 # 1 启用 / 0 停用
+    last_login_at = Column(DateTime, nullable=True)
+    created_at    = Column(DateTime, server_default=func.now())
+    updated_at    = Column(DateTime, server_default=func.now(), onupdate=func.now())
