@@ -225,22 +225,22 @@ const firstTradeDate = computed(() => {
 })
 
 // 每天 P&L map — 使用累计 P&L 的日增量，避免 close 缺失引起的跳变
+// dailyPnlMap: 直接从校正后的 curveData 取 dailyPct（step 4.5 已覆盖为后端 marketPnlPct）
 const dailyPnlMap = computed(() => {
   const map = {}
   const sorted = [...curveData.value].sort((a, b) => a.date.localeCompare(b.date))
-  let prevProfit = 0
-  let isFirst = true
-  for (const d of sorted) {
-    const cumProfit = d.totalProfit || 0
-    const cumCost   = d.totalCost || 0
-    const cumPct    = cumCost > 0 ? (cumProfit / cumCost) * 100 : 0
-    // ¥ 模式：显示累计盈亏的日增量
-    const dailyPnl = isFirst ? cumProfit : cumProfit - prevProfit
-    // % 模式：使用 marketPnlPct（仅市场波动），跳过买入日成本跳变
-    const dailyPct = d.marketPnlPct ?? (isFirst ? 0 : cumPct - 0)
-    map[d.date] = { pnl: dailyPnl, pnlPct: dailyPct, cumPnlPct: cumPct, hasData: cumCost > 0 }
-    prevProfit = cumProfit
-    isFirst = false
+  let prevPct = 0
+  for (let i = 0; i < sorted.length; i++) {
+    const d = sorted[i]
+    const cumPct = d.pnlPct ?? 0
+    const dailyPct = d.marketPnlPct ?? (i === 0 ? 0 : cumPct - prevPct)
+    map[d.date] = {
+      pnl:    d.dailyPnl ?? 0,
+      pnlPct: Number(dailyPct.toFixed(2)) || 0,
+      cumPnlPct: cumPct,
+      hasData: (d.totalCost || 0) > 0,
+    }
+    prevPct = cumPct
   }
   return map
 })
@@ -497,6 +497,16 @@ async function loadData() {
       }
     } catch (e) { console.warn('[MyReturns] portfolio history 校正失败', e) }
 
+    // step 4.6: 用校正后的 pnlPct 重新计算 dailyPct（每日变化率，非累计变化率）
+    for (let i = 1; i < curveData.value.length; i++) {
+      const curr = curveData.value[i]
+      const prev  = curveData.value[i - 1]
+      curr.dailyPct = (curr.pnlPct ?? 0) - (prev.pnlPct ?? 0)
+    }
+    if (curveData.value.length > 0) {
+      curveData.value[0].dailyPct = curveData.value[0].marketPnlPct ?? 0
+    }
+
     // step 5: 用 Portfolio 接口（实时价）校正末点 P&L
     try {
       const pf = await getPortfolioHoldings()
@@ -504,10 +514,13 @@ async function loadData() {
       if (last && pf.data) {
         const realProfit = pf.data.total_profit || 0
         const realCost   = pf.data.total_cost   || last.totalCost
+        const prevPct    = curveData.value.length > 1 ? (curveData.value[curveData.value.length - 2].pnlPct ?? 0) : 0
+        const newPct     = realCost > 0 ? (realProfit / realCost) * 100 : 0
         const prevProfit = curveData.value.length > 1 ? curveData.value[curveData.value.length - 2].totalProfit : 0
         last.totalProfit = realProfit
         last.totalCost   = realCost
-        last.pnlPct      = realCost > 0 ? (realProfit / realCost) * 100 : 0
+        last.pnlPct      = newPct
+        last.dailyPct    = newPct - prevPct
         last.pnl         = realProfit - prevProfit
       }
     } catch (e) { console.warn('[MyReturns] portfolio 校正失败', e) }

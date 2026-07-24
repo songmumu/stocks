@@ -802,10 +802,41 @@ async def get_portfolio_history(days: int = 30):
     """根据交易记录 + price_history 逐日回放组合盈亏
 
     返回 [{date, totalProfit, totalCost, dailyPnl, cumPnlPct}, ...]
-    totalCost = 截至该日累计买入成本 (含费)
-    totalProfit = 该日持仓市值 + 累计卖出已实现 - 累计买入成本
+
+    实现细节：
+    1. 为每个持仓标的自动 fetch 今日/昨日 close_price 插入 price_history (如果缺失)
+    2. 从首笔交易日起逐日回放 totalCost/marketValue/totalProfit/cumPnlPct/marketPnlPct
     """
     db: Session = SessionLocal()
+    try:
+        # step 0: 拉取今日实时价补齐 price_history
+        trades_pre = db.query(TradeRecord).filter(TradeRecord.price > 0.01).all()
+        codes = sorted({t.code for t in trades_pre})
+        if codes:
+            today = date.today()
+            quotes = fetch_realtime_batch(codes)
+            from sqlalchemy import and_
+            for q in quotes:
+                code = q.get('code', '')
+                price = float(q.get('price', 0) or 0)
+                if not code or price <= 0:
+                    continue
+                # 该 code 今天是否已有记录？
+                exists = (db.query(PriceHistory)
+                            .filter(and_(PriceHistory.code == code, PriceHistory.date == today))
+                            .first())
+                if not exists:
+                    db.add(PriceHistory(code=code, date=today, close_price=price,
+                                        open_price=price, high_price=price, low_price=price, volume=0))
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+    finally:
+        db.close()
+
+    # === 真实回放交易 + 历史价 ===
+    db = SessionLocal()
     try:
         trades = db.query(TradeRecord).filter(TradeRecord.price > 0.01).order_by(TradeRecord.trade_date).all()
         if not trades:
@@ -814,7 +845,6 @@ async def get_portfolio_history(days: int = 30):
         # 1. 按 code 取所有 close date 序列 (升序)
         codes = sorted({t.code for t in trades})
         hist = {}
-        from sqlalchemy import and_
         for code in codes:
             rows = (db.query(PriceHistory)
                       .filter(PriceHistory.code == code)
