@@ -408,7 +408,7 @@ async function loadData() {
     const histResults = {}
     await Promise.all(codes.map(async (code) => {
       try {
-        const r = await axios.get(`/api/stocks/history/${code}`, { params: { days: 730 } })
+        const r = await axios.get(`/api/stocks/history/${code}`, { params: { days: 720 } })
         const bars = r.data?.bars || []
         histResults[code] = {}
         for (const b of bars) histResults[code][b.date] = b
