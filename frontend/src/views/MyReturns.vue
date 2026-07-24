@@ -224,38 +224,25 @@ const firstTradeDate = computed(() => {
     .sort()[0]
 })
 
-// 每天 P&L map — 逐标的使用 close[today] - close[yesterday] × qty 求和
+// 每天 P&L map — 使用累计 P&L 的日增量，避免 close 缺失引起的跳变
 const dailyPnlMap = computed(() => {
   const map = {}
   const sorted = [...curveData.value].sort((a, b) => a.date.localeCompare(b.date))
-  const codes = Object.keys(histMap.value)
-
-  for (let i = 0; i < sorted.length; i++) {
-    const d = sorted[i]
-    let dailyPnl = 0
-    let validCount = 0
-    for (const code of codes) {
-      const todayClose = histMap.value[code]?.[d.date]?.close
-      let yesterdayClose = null
-      if (i > 0) {
-        for (let j = i - 1; j >= 0; j--) {
-          const c = histMap.value[code]?.[sorted[j].date]?.close
-          if (c) { yesterdayClose = c; break }
-        }
-      }
-      const qty = tradeList.value
-        .filter(t => t.code === code && t.trade_date <= d.date)
-        .reduce((s, t) => s + (t.trade_type === 'buy' ? t.quantity : -t.quantity), 0)
-      if (todayClose && yesterdayClose && qty > 0) {
-        dailyPnl += (todayClose - yesterdayClose) * qty
-        validCount++
-      }
-    }
-    if (validCount === 0) dailyPnl = 0
+  let prevProfit = 0
+  let prevCost   = 0
+  let isFirst = true
+  for (const d of sorted) {
     const cumProfit = d.totalProfit || 0
     const cumCost   = d.totalCost || 0
-    const pnlPct = cumCost > 0 ? (cumProfit / cumCost) * 100 : 0
-    map[d.date] = { pnl: dailyPnl, pnlPct, hasData: validCount > 0 }
+    const cumPct    = cumCost > 0 ? (cumProfit / cumCost) * 100 : 0
+    // ¥ 模式：显示累计盈亏的日增量
+    const dailyPnl = isFirst ? cumProfit : cumProfit - prevProfit
+    // % 模式：显示累计收益率的日变化 (用 cumPct - prevPct)
+    const dailyPct = isFirst ? cumPct : cumPct - (prevCost > 0 ? (prevProfit / prevCost) * 100 : 0)
+    map[d.date] = { pnl: dailyPnl, pnlPct: dailyPct, cumPnlPct: cumPct, hasData: cumCost > 0 }
+    prevProfit = cumProfit
+    prevCost   = cumCost
+    isFirst = false
   }
   return map
 })
@@ -284,8 +271,8 @@ const dayCells = computed(() => {
     cells.push({
       day: d,
       date: dateStr,
-      pnl:    pnlData?.pnl    || 0,
-      pnlPct: pnlData?.pnlPct || 0,
+      pnl:      pnlData?.pnl        || 0,
+      pnlPct:   pnlData?.cumPnlPct  || pnlData?.pnlPct || 0,
       isEmpty: !pnlData,
       isToday,
       isFuture,
