@@ -229,7 +229,7 @@ const dailyPnlMap = computed(() => {
   const map = {}
   const sorted = [...curveData.value].sort((a, b) => a.date.localeCompare(b.date))
   let prevProfit = 0
-  let prevCost   = 0
+  let prevPct    = 0
   let isFirst = true
   for (const d of sorted) {
     const cumProfit = d.totalProfit || 0
@@ -237,11 +237,11 @@ const dailyPnlMap = computed(() => {
     const cumPct    = cumCost > 0 ? (cumProfit / cumCost) * 100 : 0
     // ¥ 模式：显示累计盈亏的日增量
     const dailyPnl = isFirst ? cumProfit : cumProfit - prevProfit
-    // % 模式：显示累计收益率的日变化 (用 cumPct - prevPct)
-    const dailyPct = isFirst ? cumPct : cumPct - (prevCost > 0 ? (prevProfit / prevCost) * 100 : 0)
+    // % 模式：显示累计收益率的日变化
+    const dailyPct = isFirst ? cumPct : cumPct - prevPct
     map[d.date] = { pnl: dailyPnl, pnlPct: dailyPct, cumPnlPct: cumPct, hasData: cumCost > 0 }
     prevProfit = cumProfit
-    prevCost   = cumCost
+    prevPct    = cumPct
     isFirst = false
   }
   return map
@@ -272,7 +272,8 @@ const dayCells = computed(() => {
       day: d,
       date: dateStr,
       pnl:      pnlData?.pnl        || 0,
-      pnlPct:   pnlData?.cumPnlPct  || pnlData?.pnlPct || 0,
+      pnlPct:   pnlData?.cumPnlPct  || pnlData?.pnlPct || 0,  // 累计收益率 (染色用)
+      dailyPct: pnlData?.pnlPct     || 0,                     // 日增量变化 (数字用)
       isEmpty: !pnlData,
       isToday,
       isFuture,
@@ -406,13 +407,16 @@ function navigateNext() {
 function getPnlStyle(pnlPct, isEmpty, isFuture) {
   if (isFuture) return { background: '#f9f9f9' }
   if (isEmpty)   return {}
-  const abs = Math.abs(pnlPct)
+  // pnlPct 是该日累计收益率 (%)，参考范围 [-20, 20]
+  const pct = Math.max(-20, Math.min(20, pnlPct || 0))
+  const abs = Math.abs(pct)
   let bg
-  if (abs < 0.3)      bg = 'rgba(200,200,200,0.2)'
-  else if (abs < 1.5) bg = pnlPct > 0 ? 'rgba(239,68,68,0.25)' : 'rgba(34,197,94,0.25)'
-  else if (abs < 3)   bg = pnlPct > 0 ? 'rgba(239,68,68,0.45)' : 'rgba(34,197,94,0.45)'
-  else                bg = pnlPct > 0 ? 'rgba(239,68,68,0.7)'   : 'rgba(34,197,94,0.7)'
-  const color = abs > 1 ? (pnlPct > 0 ? '#ef4444' : '#22c55e') : '#666'
+  if (abs < 0.1)      bg = 'rgba(200,200,200,0.2)'
+  else if (abs < 2)   bg = pct > 0 ? 'rgba(239,68,68,0.25)' : 'rgba(34,197,94,0.25)'
+  else if (abs < 6)   bg = pct > 0 ? 'rgba(239,68,68,0.45)' : 'rgba(34,197,94,0.45)'
+  else if (abs < 12)  bg = pct > 0 ? 'rgba(239,68,68,0.65)' : 'rgba(34,197,94,0.65)'
+  else                bg = pct > 0 ? 'rgba(239,68,68,0.85)' : 'rgba(34,197,94,0.85)'
+  const color = abs > 0.3 ? (pct > 0 ? '#ef4444' : '#22c55e') : '#666'
   return { background: bg, color }
 }
 
@@ -422,7 +426,7 @@ function getPnlText(cell) {
     const p = Number(cell.pnl) || 0
     return (p >= 0 ? '+' : '') + '¥' + (p / 1000).toFixed(1) + 'k'
   }
-  const pct = Number(cell.pnlPct) || 0
+  const pct = Number(cell.dailyPct ?? cell.pnlPct) || 0
   return (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%'
 }
 
@@ -468,6 +472,31 @@ async function loadData() {
 
     // step 4: 构建曲线
     curveData.value = buildCurveData(tradeList.value, histResults)
+
+    // step 4.5: 用后端 /api/portfolio/history 覆盖每日 totalProfit/totalCost/cumPnlPct
+    try {
+      const histRes = await axios.get('/api/portfolio/history', {
+        params: { days: 720 },
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+      const backendHistory = histRes.data?.history || []
+      if (backendHistory.length) {
+        const backMap = {}
+        for (const h of backendHistory) backMap[h.date] = h
+        curveData.value = curveData.value.map(d => {
+          const b = backMap[d.date]
+          if (b) {
+            return {
+              ...d,
+              totalProfit: b.totalProfit,
+              totalCost:   b.totalCost,
+              pnlPct:      b.cumPnlPct,
+            }
+          }
+          return d
+        })
+      }
+    } catch (e) { console.warn('[MyReturns] portfolio history 校正失败', e) }
 
     // step 5: 用 Portfolio 接口（实时价）校正末点 P&L
     try {

@@ -795,3 +795,91 @@ async def get_advices(payload: dict = Body(default={})):
 async def post_update_peak(code: str, current_profit: float):
     result = update_peak_profit(code, current_profit)
     return {"code": code, "result": result}
+
+
+@router.get("/history")
+async def get_portfolio_history(days: int = 30):
+    """根据交易记录 + price_history 逐日回放组合盈亏
+
+    返回 [{date, totalProfit, totalCost, dailyPnl, cumPnlPct}, ...]
+    totalCost = 截至该日累计买入成本 (含费)
+    totalProfit = 该日持仓市值 + 累计卖出已实现 - 累计买入成本
+    """
+    db: Session = SessionLocal()
+    try:
+        trades = db.query(TradeRecord).filter(TradeRecord.price > 0.01).order_by(TradeRecord.trade_date).all()
+        if not trades:
+            return {"history": []}
+
+        # 1. 按 code 取所有 close date 序列 (升序)
+        codes = sorted({t.code for t in trades})
+        hist = {}
+        from sqlalchemy import and_
+        for code in codes:
+            rows = (db.query(PriceHistory)
+                      .filter(PriceHistory.code == code)
+                      .order_by(PriceHistory.date)
+                      .all())
+            hist[code] = {r.date: r.close_price for r in rows}
+
+        # 2. 找到所有需要回放的日期 (从首个交易日起 ±30 天)
+        first_trade = trades[0].trade_date
+        last_close = max((max(d.keys()) for d in hist.values() if d), default=first_trade)
+        start = first_trade
+        end = min(last_close, date.today())
+        all_dates = sorted({d for code_dict in hist.values() for d in code_dict.keys()
+                            if start <= d <= end})
+        # 限制 days
+        if len(all_dates) > days:
+            all_dates = all_dates[-days:]
+
+        # 3. 逐日回放
+        history = []
+        cum_sell = 0.0  # 累计已实现 P&L（按 FIFO 粗略：卖出回笼成本部分作现金保留）
+
+        for d in all_dates:
+            cum_buy_cost = 0.0
+            cum_buy_qty = {}  # code -> 累计净持仓
+            cum_sell_amt = 0.0
+            for t in trades:
+                if t.trade_date > d:
+                    continue
+                qty = float(t.quantity)
+                price = float(t.price)
+                fee = float(t.fee or 0)
+                if t.trade_type == 'buy':
+                    cum_buy_cost += price * qty + fee
+                    cum_buy_qty[t.code] = cum_buy_qty.get(t.code, 0) + qty
+                else:
+                    cum_buy_qty[t.code] = cum_buy_qty.get(t.code, 0) - qty
+                    cum_sell_amt += price * qty - fee
+            # 当前持仓市值
+            market_value = 0.0
+            for code, qty in cum_buy_qty.items():
+                if qty <= 0:
+                    continue
+                # 找该日或之前最近的 close
+                close = hist.get(code, {}).get(d)
+                if close is None:
+                    # fallback: 之前最近的有效 close
+                    valid_dates = [dt for dt in hist.get(code, {}).keys() if dt <= d]
+                    if valid_dates:
+                        close = hist[code][max(valid_dates)]
+                    else:
+                        continue
+                market_value += close * qty
+
+            total_value = market_value + cum_sell_amt
+            total_profit = total_value - cum_buy_cost
+            cum_pnl_pct = (total_profit / cum_buy_cost * 100) if cum_buy_cost > 0 else 0
+
+            history.append({
+                "date": d.isoformat(),
+                "totalProfit": round(total_profit, 2),
+                "totalCost":   round(cum_buy_cost, 2),
+                "marketValue": round(market_value, 2),
+                "cumPnlPct":   round(cum_pnl_pct, 4),
+            })
+        return {"history": history}
+    finally:
+        db.close()
