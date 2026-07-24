@@ -855,8 +855,8 @@ async def get_portfolio_history(days: int = 30):
                     cum_sell_amt += price * qty - fee
             # 当前持仓市值 + 各标的的日收益率加权
             market_value = 0.0
-            weighted_pnl_pct = 0.0  # 市值加权的今日收益率
             today_close_per_code = {}
+            today_value_per_code = {}
             for code, qty in cum_buy_qty.items():
                 if qty <= 0:
                     continue
@@ -871,12 +871,15 @@ async def get_portfolio_history(days: int = 30):
                 value = close * qty
                 market_value += value
                 today_close_per_code[code] = close
-                # 计算该标的日收益率 (今日 close / 昨日 close - 1)
+                today_value_per_code[code] = value
+            # 在计算完总市值后再加权各标的口收益率
+            weighted_pnl_pct = 0.0
+            for code, value in today_value_per_code.items():
                 prev_close = prev_close_per_code.get(code)
-                if prev_close and prev_close > 0:
+                close = today_close_per_code[code]
+                if prev_close and prev_close > 0 and market_value > 0:
                     code_daily_pct = (close - prev_close) / prev_close * 100
-                    # 加权 (按今日市值)
-                    weighted_pnl_pct += code_daily_pct * (value / max(market_value, 1e-9))
+                    weighted_pnl_pct += code_daily_pct * (value / market_value)
 
             total_value = market_value + cum_sell_amt
             total_profit = total_value - cum_buy_cost
