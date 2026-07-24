@@ -96,6 +96,7 @@
                 :title="cell.tradeCount ? `${cell.tradeCount} 笔交易 (买${cell.buyCount}/卖${cell.sellCount})` : ''"
               >
                 <span class="cell-date">{{ cell.day }}</span>
+                <span class="cell-pnl" v-if="!cell.isEmpty && !cell.isFuture">{{ getPnlText(cell) }}</span>
                 <span class="cell-mark" v-if="cell.tradeCount > 0">
                   <span class="dot dot-buy" v-if="cell.buyCount">B{{ cell.buyCount }}</span>
                   <span class="dot dot-sell" v-if="cell.sellCount">S{{ cell.sellCount }}</span>
@@ -223,30 +224,38 @@ const firstTradeDate = computed(() => {
     .sort()[0]
 })
 
-// 每天 P&L map — 使用每一日各标的 close 价计算浮动盈亏变化
+// 每天 P&L map — 逐标的使用 close[today] - close[yesterday] × qty 求和
 const dailyPnlMap = computed(() => {
   const map = {}
-  // 倒序计算各标的逐日浮动盈亏变化
   const sorted = [...curveData.value].sort((a, b) => a.date.localeCompare(b.date))
-  let prevProfit = 0
-  let isFirst = true
-  for (const d of sorted) {
-    // d.totalProfit 包含已实现 + 浮动。我们需计算纯浮动变化 = d.totalProfit - prevRealizedProfit
-    // 简化：使用 d.totalProfit 与前一天 totalProfit 的差作为日 P&L。
-    // 为避免 close=0 跳变，仅以 “是否这一日才有买入” 为依据补全。
-    const tradingPnl = d.tradingPnl || 0
-    if (isFirst) {
-      // 首点 P&L = 纯浮亏 (因 totalProfit=浮亏)
-      map[d.date] = { pnl: 0, pnlPct: d.pnlPct || 0, tradingPnl }
-    } else {
-      const dailyDiff = (d.totalProfit || 0) - prevProfit
-      // 过滤异常跳变：若日盈亏超过了累计资产 50% 则返回 0 (说明 close 缺失)
-      const limit = Math.max(10000, Math.abs(prevProfit) * 1.5 + 10000)
-      const dailyPnl = Math.abs(dailyDiff) > limit ? 0 : dailyDiff
-      map[d.date] = { pnl: dailyPnl, pnlPct: d.pnlPct || 0, tradingPnl }
+  const codes = Object.keys(histMap.value)
+
+  for (let i = 0; i < sorted.length; i++) {
+    const d = sorted[i]
+    let dailyPnl = 0
+    let validCount = 0
+    for (const code of codes) {
+      const todayClose = histMap.value[code]?.[d.date]?.close
+      let yesterdayClose = null
+      if (i > 0) {
+        for (let j = i - 1; j >= 0; j--) {
+          const c = histMap.value[code]?.[sorted[j].date]?.close
+          if (c) { yesterdayClose = c; break }
+        }
+      }
+      const qty = tradeList.value
+        .filter(t => t.code === code && t.trade_date <= d.date)
+        .reduce((s, t) => s + (t.trade_type === 'buy' ? t.quantity : -t.quantity), 0)
+      if (todayClose && yesterdayClose && qty > 0) {
+        dailyPnl += (todayClose - yesterdayClose) * qty
+        validCount++
+      }
     }
-    prevProfit = d.totalProfit || 0
-    isFirst = false
+    if (validCount === 0) dailyPnl = 0
+    const cumProfit = d.totalProfit || 0
+    const cumCost   = d.totalCost || 0
+    const pnlPct = cumCost > 0 ? (cumProfit / cumCost) * 100 : 0
+    map[d.date] = { pnl: dailyPnl, pnlPct, hasData: validCount > 0 }
   }
   return map
 })
