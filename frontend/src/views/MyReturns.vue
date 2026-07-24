@@ -189,21 +189,14 @@ const holdingProfit = computed(() => {
 
 const maxDrawdownPct = computed(() => {
   if (!curveData.value.length) return 0
-  // 跟踪总资产 = 累计投入 + 累计 P&L
-  let peakValue = 0  // 跟踪到今天为止的最高资产
+  // 取近期点（后N点）的资产价值，避免历史估值为0引起的畸高回撤
+  const recent = curveData.value.slice(-30)
+  let peakValue = 0
   let maxDD = 0
   let cumBuy = 0
-  for (const d of curveData.value) {
-    cumBuy += (d.pnl >= 0 ? 0 : 0) // 占位，保持阅读顺序。实际上 ceil(totalCost[i]) - 累计买入金额
-  }
-  // 上面额做额复杂，简化为使用（prev.totalCost+prev.totalProfit）作为顶
-  peakValue = -Infinity
-  maxDD = 0
-  cumBuy = 0
-  for (const d of curveData.value) {
-    // 资产价值 ≈ 总成本 + 总盈利。使用总成本（持股代价）作为买入累计
-    cumBuy = Math.max(cumBuy, d.totalCost)
-    const value = cumBuy + d.totalProfit
+  for (const d of recent) {
+    cumBuy = Math.max(cumBuy, d.totalCost || 0)
+    const value = cumBuy + (d.totalProfit || 0)
     if (value > peakValue) peakValue = value
     if (peakValue > 0) {
       const dd = ((value - peakValue) / peakValue) * 100
@@ -439,7 +432,22 @@ async function loadData() {
     // step 4: 构建曲线
     curveData.value = buildCurveData(tradeList.value, histResults)
 
-    // step 5: 渲染
+    // step 5: 用 Portfolio 接口（实时价）校正末点 P&L
+    try {
+      const pf = await getPortfolioHoldings()
+      const last = curveData.value[curveData.value.length - 1]
+      if (last && pf.data) {
+        const realProfit = pf.data.total_profit || 0
+        const realCost   = pf.data.total_cost   || last.totalCost
+        const prevProfit = curveData.value.length > 1 ? curveData.value[curveData.value.length - 2].totalProfit : 0
+        last.totalProfit = realProfit
+        last.totalCost   = realCost
+        last.pnlPct      = realCost > 0 ? (realProfit / realCost) * 100 : 0
+        last.pnl         = realProfit - prevProfit
+      }
+    } catch (e) { console.warn('[MyReturns] portfolio 校正失败', e) }
+
+    // step 6: 渲染
     await nextTick()
     renderCurve()
 
