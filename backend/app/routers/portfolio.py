@@ -835,8 +835,7 @@ async def get_portfolio_history(days: int = 30):
 
         # 3. 逐日回放
         history = []
-        prev_market_value = 0.0
-        prev_cum_profit    = 0.0
+        prev_close_per_code = {}  # code -> 上一个有效 close (用于计算日收益率)
 
         for d in all_dates:
             cum_buy_cost = 0.0
@@ -854,29 +853,34 @@ async def get_portfolio_history(days: int = 30):
                 else:
                     cum_buy_qty[t.code] = cum_buy_qty.get(t.code, 0) - qty
                     cum_sell_amt += price * qty - fee
-            # 当前持仓市值
+            # 当前持仓市值 + 各标的的日收益率加权
             market_value = 0.0
+            weighted_pnl_pct = 0.0  # 市值加权的今日收益率
+            today_close_per_code = {}
             for code, qty in cum_buy_qty.items():
                 if qty <= 0:
                     continue
                 # 找该日或之前最近的 close
                 close = hist.get(code, {}).get(d)
                 if close is None:
-                    # fallback: 之前最近的有效 close
                     valid_dates = [dt for dt in hist.get(code, {}).keys() if dt <= d]
                     if valid_dates:
                         close = hist[code][max(valid_dates)]
                     else:
                         continue
-                market_value += close * qty
+                value = close * qty
+                market_value += value
+                today_close_per_code[code] = close
+                # 计算该标的日收益率 (今日 close / 昨日 close - 1)
+                prev_close = prev_close_per_code.get(code)
+                if prev_close and prev_close > 0:
+                    code_daily_pct = (close - prev_close) / prev_close * 100
+                    # 加权 (按今日市值)
+                    weighted_pnl_pct += code_daily_pct * (value / max(market_value, 1e-9))
 
             total_value = market_value + cum_sell_amt
             total_profit = total_value - cum_buy_cost
             cum_pnl_pct = (total_profit / cum_buy_cost * 100) if cum_buy_cost > 0 else 0
-            # marketPnlPct: 跳过买入日成本跳变 — 仅看市值变化
-            market_pnl_pct = 0.0
-            if prev_market_value > 0 and market_value > 0:
-                market_pnl_pct = (market_value - prev_market_value) / prev_market_value * 100
 
             history.append({
                 "date": d.isoformat(),
@@ -884,10 +888,9 @@ async def get_portfolio_history(days: int = 30):
                 "totalCost":   round(cum_buy_cost, 2),
                 "marketValue": round(market_value, 2),
                 "cumPnlPct":   round(cum_pnl_pct, 4),
-                "marketPnlPct": round(market_pnl_pct, 4),
+                "marketPnlPct": round(weighted_pnl_pct, 4),
             })
-            prev_market_value = market_value
-            prev_cum_profit = total_profit
+            prev_close_per_code = today_close_per_code
         return {"history": history}
     finally:
         db.close()
