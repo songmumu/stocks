@@ -835,7 +835,8 @@ async def get_portfolio_history(days: int = 30):
 
         # 3. 逐日回放
         history = []
-        cum_sell = 0.0  # 累计已实现 P&L（按 FIFO 粗略：卖出回笼成本部分作现金保留）
+        prev_market_value = 0.0
+        prev_cum_profit    = 0.0
 
         for d in all_dates:
             cum_buy_cost = 0.0
@@ -872,6 +873,10 @@ async def get_portfolio_history(days: int = 30):
             total_value = market_value + cum_sell_amt
             total_profit = total_value - cum_buy_cost
             cum_pnl_pct = (total_profit / cum_buy_cost * 100) if cum_buy_cost > 0 else 0
+            # marketPnlPct: 跳过买入日成本跳变 — 仅看市值变化
+            market_pnl_pct = 0.0
+            if prev_market_value > 0 and market_value > 0:
+                market_pnl_pct = (market_value - prev_market_value) / prev_market_value * 100
 
             history.append({
                 "date": d.isoformat(),
@@ -879,7 +884,10 @@ async def get_portfolio_history(days: int = 30):
                 "totalCost":   round(cum_buy_cost, 2),
                 "marketValue": round(market_value, 2),
                 "cumPnlPct":   round(cum_pnl_pct, 4),
+                "marketPnlPct": round(market_pnl_pct, 4),
             })
+            prev_market_value = market_value
+            prev_cum_profit = total_profit
         return {"history": history}
     finally:
         db.close()

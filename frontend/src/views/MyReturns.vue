@@ -229,7 +229,6 @@ const dailyPnlMap = computed(() => {
   const map = {}
   const sorted = [...curveData.value].sort((a, b) => a.date.localeCompare(b.date))
   let prevProfit = 0
-  let prevPct    = 0
   let isFirst = true
   for (const d of sorted) {
     const cumProfit = d.totalProfit || 0
@@ -237,11 +236,10 @@ const dailyPnlMap = computed(() => {
     const cumPct    = cumCost > 0 ? (cumProfit / cumCost) * 100 : 0
     // ¥ 模式：显示累计盈亏的日增量
     const dailyPnl = isFirst ? cumProfit : cumProfit - prevProfit
-    // % 模式：显示累计收益率的日变化
-    const dailyPct = isFirst ? cumPct : cumPct - prevPct
+    // % 模式：使用 marketPnlPct（仅市场波动），跳过买入日成本跳变
+    const dailyPct = d.marketPnlPct ?? (isFirst ? 0 : cumPct - 0)
     map[d.date] = { pnl: dailyPnl, pnlPct: dailyPct, cumPnlPct: cumPct, hasData: cumCost > 0 }
     prevProfit = cumProfit
-    prevPct    = cumPct
     isFirst = false
   }
   return map
@@ -491,6 +489,7 @@ async function loadData() {
               totalProfit: b.totalProfit,
               totalCost:   b.totalCost,
               pnlPct:      b.cumPnlPct,
+              marketPnlPct: b.marketPnlPct,  // 仅市场波动 (跳过买入日成本跳变)
             }
           }
           return d
