@@ -52,10 +52,10 @@
               <button :class="{active: curveMode==='amount'}" @click="curveMode='amount'">收益金额</button>
             </div>
           </div>
-          <div v-if="curveData.length === 0" class="empty-panel">
-            <p>暂无收益数据</p>
-          </div>
-          <div v-else class="chart-wrap">
+          <div class="chart-wrap">
+            <div v-if="curveData.length === 0" class="empty-panel">
+              <p>暂无收益数据</p>
+            </div>
             <div ref="curveRef" class="chart-container"></div>
           </div>
         </div>
