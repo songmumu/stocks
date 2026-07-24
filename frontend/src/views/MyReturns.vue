@@ -91,11 +91,15 @@
               <div
                 v-for="(cell, idx) in dayCells" :key="idx"
                 class="cal-cell"
-                :class="[getCellClass(cell), { 'is-today': cell.isToday, 'is-future': cell.isFuture }]"
+                :class="[getCellClass(cell), { 'is-today': cell.isToday, 'is-future': cell.isFuture, 'has-trade': cell.tradeCount > 0 }]"
                 :style="getPnlStyle(cell.pnlPct, cell.isEmpty, cell.isFuture)"
+                :title="cell.tradeCount ? `${cell.tradeCount} 笔交易 (买${cell.buyCount}/卖${cell.sellCount})` : ''"
               >
                 <span class="cell-date">{{ cell.day }}</span>
-                <span class="cell-pnl" v-if="!cell.isEmpty && !cell.isFuture">{{ getPnlText(cell) }}</span>
+                <span class="cell-mark" v-if="cell.tradeCount > 0">
+                  <span class="dot dot-buy" v-if="cell.buyCount">B{{ cell.buyCount }}</span>
+                  <span class="dot dot-sell" v-if="cell.sellCount">S{{ cell.sellCount }}</span>
+                </span>
               </div>
             </div>
           </div>
@@ -219,11 +223,30 @@ const firstTradeDate = computed(() => {
     .sort()[0]
 })
 
-// 每天 P&L map
+// 每天 P&L map — 使用每一日各标的 close 价计算浮动盈亏变化
 const dailyPnlMap = computed(() => {
   const map = {}
-  for (const d of curveData.value) {
-    if (d.date) map[d.date] = { pnl: d.pnl || 0, pnlPct: d.pnlPct || 0 }
+  // 倒序计算各标的逐日浮动盈亏变化
+  const sorted = [...curveData.value].sort((a, b) => a.date.localeCompare(b.date))
+  let prevProfit = 0
+  let isFirst = true
+  for (const d of sorted) {
+    // d.totalProfit 包含已实现 + 浮动。我们需计算纯浮动变化 = d.totalProfit - prevRealizedProfit
+    // 简化：使用 d.totalProfit 与前一天 totalProfit 的差作为日 P&L。
+    // 为避免 close=0 跳变，仅以 “是否这一日才有买入” 为依据补全。
+    const tradingPnl = d.tradingPnl || 0
+    if (isFirst) {
+      // 首点 P&L = 纯浮亏 (因 totalProfit=浮亏)
+      map[d.date] = { pnl: 0, pnlPct: d.pnlPct || 0, tradingPnl }
+    } else {
+      const dailyDiff = (d.totalProfit || 0) - prevProfit
+      // 过滤异常跳变：若日盈亏超过了累计资产 50% 则返回 0 (说明 close 缺失)
+      const limit = Math.max(10000, Math.abs(prevProfit) * 1.5 + 10000)
+      const dailyPnl = Math.abs(dailyDiff) > limit ? 0 : dailyDiff
+      map[d.date] = { pnl: dailyPnl, pnlPct: d.pnlPct || 0, tradingPnl }
+    }
+    prevProfit = d.totalProfit || 0
+    isFirst = false
   }
   return map
 })
@@ -246,6 +269,9 @@ const dayCells = computed(() => {
                     d === today.getDate()
     const isFuture = new Date(year, month - 1, d) > today
     const pnlData = dailyPnlMap.value[dateStr]
+    const dayTrades = tradeList.value.filter(t => t.trade_date === dateStr)
+    const buyCount  = dayTrades.filter(t => t.trade_type === 'buy').length
+    const sellCount = dayTrades.filter(t => t.trade_type !== 'buy').length
     cells.push({
       day: d,
       date: dateStr,
@@ -254,6 +280,9 @@ const dayCells = computed(() => {
       isEmpty: !pnlData,
       isToday,
       isFuture,
+      tradeCount: dayTrades.length,
+      buyCount,
+      sellCount,
     })
   }
   return cells
@@ -263,22 +292,34 @@ const dayCells = computed(() => {
 const monthCards = computed(() => {
   const year = currentYear.value
   const cards = []
+  // 按月组织：当月内各日累计 totalProfit 最后一个 vs 前月最后一个 = 该月 P&L
+  const allByMonth = {}
+  for (const d of curveData.value) {
+    if (!d.date) continue
+    const ym = d.date.slice(0, 7)
+    if (!allByMonth[ym]) allByMonth[ym] = []
+    allByMonth[ym].push(d)
+  }
   for (let m = 1; m <= 12; m++) {
-    const label    = `${m}月`
-    const key      = `${year}-${String(m).padStart(2,'0')}`
-    const monthMap = {}
-    for (const d of curveData.value) {
-      if (d.date && d.date.startsWith(key)) {
-        monthMap[d.date] = d
-      }
+    const key = `${year}-${String(m).padStart(2,'0')}`
+    const monthEntries = (allByMonth[key] || []).sort((a, b) => a.date.localeCompare(b.date))
+    const hasData = monthEntries.length > 0
+    // 取该月末点的 totalProfit，以及上月末点（如有）
+    let monthProfit = 0
+    let monthCost = 0
+    let prevMonthEnd = 0
+    const prevKey = `${year}-${String(m-1).padStart(2,'0')}`
+    if (m > 1) {
+      const prevList = allByMonth[prevKey] || []
+      if (prevList.length) prevMonthEnd = prevList[prevList.length - 1].totalProfit || 0
     }
-    const entries = Object.values(monthMap)
-    const hasData = entries.length > 0
-    const pnl   = hasData ? entries.reduce((s, e) => s + (e.pnl || 0), 0) : 0
-    const pnlPct = hasData
-      ? entries.reduce((s, e) => s + (e.pnlPct || 0), 0) / entries.length
-      : 0
-    cards.push({ label, key, pnl, pnlPct, hasData })
+    if (hasData) {
+      const lastDay = monthEntries[monthEntries.length - 1]
+      monthProfit = (lastDay.totalProfit || 0) - prevMonthEnd
+      monthCost   = lastDay.totalCost || 0
+    }
+    const pnlPct = monthCost > 0 ? (monthProfit / monthCost) * 100 : 0
+    cards.push({ label: `${m}月`, key, pnl: monthProfit, pnlPct, hasData })
   }
   return cards
 })
@@ -538,6 +579,8 @@ function buildCurveData(trades, histMap) {
       totalProfit,
       totalCost: totalCost || 0,
       pnlPct: cumulativeBuyAmount > 0 ? (totalProfit / cumulativeBuyAmount) * 100 : 0,
+      tradingPnl: dailyRealized,        // 今日已实现盈亏（卖出）
+      tradedAmount: dayTrades.reduce((s, t) => s + (t.price || 0) * (t.quantity || 0), 0),
     })
 
     curDate.setDate(curDate.getDate() + 1)
@@ -718,6 +761,10 @@ watch(curveMode, () => {
 .cal-cell.is-empty { background: transparent; }
 .cell-date { font-size: 11px; color: inherit; opacity: .7; }
 .cell-pnl  { font-size: 11px; font-weight: 600; color: inherit; margin-top: 1px; }
+.cell-mark { display: flex; gap: 2px; margin-top: 1px; font-size: 9px; font-weight: 600; }
+.dot       { padding: 1px 3px; border-radius: 3px; line-height: 1; }
+.dot-buy   { background: #fef2f2; color: #ef4444; }
+.dot-sell  { background: #f0fdf4; color: #22c55e; }
 
 /* 月周年视图 */
 .cal-month-view { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
