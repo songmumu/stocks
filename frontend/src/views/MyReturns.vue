@@ -371,9 +371,13 @@ function getPnlStyle(pnlPct, isEmpty, isFuture) {
 }
 
 function getPnlText(cell) {
-  if (displayMode.value === 'amount')
-    return (cell.pnl >= 0 ? '+' : '') + '¥' + (cell.pnl / 1000).toFixed(1) + 'k'
-  return (cell.pnlPct >= 0 ? '+' : '') + cell.pnlPct.toFixed(2) + '%'
+  if (!cell) return ''
+  if (displayMode.value === 'amount') {
+    const p = Number(cell.pnl) || 0
+    return (p >= 0 ? '+' : '') + '¥' + (p / 1000).toFixed(1) + 'k'
+  }
+  const pct = Number(cell.pnlPct) || 0
+  return (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%'
 }
 
 function getCellClass(cell) {
@@ -561,16 +565,24 @@ function scheduleResize() {
 // === 生命周期 ===
 onMounted(() => {
   loadData()
-  if (curveRef.value) {
-    resizeObserver.value = new ResizeObserver(() => curveChart.value?.resize())
-    resizeObserver.value.observe(curveRef.value)
-  }
+  nextTick(() => {
+    if (curveRef.value) {
+      resizeObserver.value = new ResizeObserver(() => {
+        const inst = curveChart.value
+        if (inst && typeof inst.resize === 'function') inst.resize()
+      })
+      resizeObserver.value.observe(curveRef.value)
+    }
+  })
 })
 
 onUnmounted(() => {
-  curveChart.value?.dispose()
+  const ro = resizeObserver.value
+  resizeObserver.value = null
+  if (ro) ro.disconnect()
+  const inst = curveChart.value
   curveChart.value = null
-  resizeObserver.value?.disconnect()
+  if (inst && typeof inst.dispose === 'function') inst.dispose()
 })
 
 watch(curveMode, () => {
