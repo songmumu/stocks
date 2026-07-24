@@ -172,9 +172,10 @@ const totalCost = computed(() => {
 
 const totalReturnPct = computed(() => {
   if (!curveData.value.length || totalCost.value === 0) return 0
-  const first = curveData.value[0]
-  if (!first || first.totalCost === 0) return 0
-  return (first.totalProfit / first.totalCost) * 100
+  const last = curveData.value[curveData.value.length - 1]
+  if (!last) return 0
+  // 累计收益率 = 末点 totalProfit / 累计投入资金 totalCost
+  return (last.totalProfit / totalCost.value) * 100
 })
 
 const totalProfit = computed(() => {
@@ -188,11 +189,26 @@ const holdingProfit = computed(() => {
 
 const maxDrawdownPct = computed(() => {
   if (!curveData.value.length) return 0
-  let peak = -Infinity, maxDD = 0
+  // 跟踪总资产 = 累计投入 + 累计 P&L
+  let peakValue = 0  // 跟踪到今天为止的最高资产
+  let maxDD = 0
+  let cumBuy = 0
   for (const d of curveData.value) {
-    if (d.totalProfit > peak) peak = d.totalProfit
-    const dd = peak > 0 ? ((d.totalProfit - peak) / peak) * 100 : 0
-    if (dd < maxDD) maxDD = dd
+    cumBuy += (d.pnl >= 0 ? 0 : 0) // 占位，保持阅读顺序。实际上 ceil(totalCost[i]) - 累计买入金额
+  }
+  // 上面额做额复杂，简化为使用（prev.totalCost+prev.totalProfit）作为顶
+  peakValue = -Infinity
+  maxDD = 0
+  cumBuy = 0
+  for (const d of curveData.value) {
+    // 资产价值 ≈ 总成本 + 总盈利。使用总成本（持股代价）作为买入累计
+    cumBuy = Math.max(cumBuy, d.totalCost)
+    const value = cumBuy + d.totalProfit
+    if (value > peakValue) peakValue = value
+    if (peakValue > 0) {
+      const dd = ((value - peakValue) / peakValue) * 100
+      if (dd < maxDD) maxDD = dd
+    }
   }
   return maxDD
 })
@@ -442,55 +458,80 @@ function buildCurveData(trades, histMap) {
   const sorted = [...trades].sort((a, b) => a.trade_date.localeCompare(b.trade_date))
   const firstDate = sorted[0].trade_date
 
-  // 各标的每日持仓
-  const holdings = {}   // code -> { quantity, cost }
-  const points   = []
+  // FIFO 买入批次。 code -> [{ qty, price }]
+  const lots = {}
+  const points = []
 
-  // 遍历从首笔交易到今天的每一天
+  let realizedProfit = 0
+  let cumulativeBuyAmount = 0
+
   const today = new Date().toISOString().slice(0, 10)
   let curDate = new Date(firstDate)
-  let prevTotalProfit = 0
 
   while (curDate.toISOString().slice(0, 10) <= today) {
     const dateStr = curDate.toISOString().slice(0, 10)
     const dayTrades = sorted.filter(t => t.trade_date === dateStr)
 
-    // 更新持仓
+    let dailyRealized = 0
+
     for (const t of dayTrades) {
-      if (!holdings[t.code]) holdings[t.code] = { quantity: 0, cost: 0 }
+      if (!lots[t.code]) lots[t.code] = []
+
       if (t.trade_type === 'buy') {
-        holdings[t.code].cost     += t.price * t.quantity
-        holdings[t.code].quantity += t.quantity
+        lots[t.code].push({ qty: t.quantity, price: t.price })
+        cumulativeBuyAmount += t.price * t.quantity
       } else {
-        const avgCost = holdings[t.code].quantity > 0
-          ? holdings[t.code].cost / holdings[t.code].quantity : 0
-        holdings[t.code].cost     -= avgCost * Math.min(t.quantity, holdings[t.code].quantity)
-        holdings[t.code].quantity -= Math.min(t.quantity, holdings[t.code].quantity)
-        if (holdings[t.code].quantity <= 0) delete holdings[t.code]
+        // FIFO 卖出
+        const qtyToSell = Math.min(t.quantity, lots[t.code].reduce((s, l) => s + l.qty, 0))
+        let soldCost = 0
+        let remaining = qtyToSell
+        while (remaining > 0 && lots[t.code].length) {
+          const top = lots[t.code][0]
+          const take = Math.min(remaining, top.qty)
+          soldCost += take * top.price
+          top.qty -= take
+          remaining -= take
+          if (top.qty <= 0) lots[t.code].shift()
+        }
+        const sellAmount = t.price * qtyToSell
+        dailyRealized += sellAmount - soldCost
       }
     }
+    realizedProfit += dailyRealized
 
-    // 当日盈亏 = 持仓市值变化
-    let dayProfit = 0
-    const dayClose = histMap[sorted[0]?.code]?.[dateStr]?.close || 0
-    let totalCost = 0, totalVal = 0
-    for (const [code, h] of Object.entries(holdings)) {
-      totalCost += h.cost
+    // 计算当前持仓市值（使用当天 close）
+    let totalCost = 0
+    let totalVal  = 0
+    let totalQty  = 0
+    for (const [code, ls] of Object.entries(lots)) {
+      const qty = ls.reduce((s, l) => s + l.qty, 0)
+      if (qty <= 0) continue
+      const cost = ls.reduce((s, l) => s + l.qty * l.price, 0)
+      totalCost += cost
+      totalQty  += qty
       const close = histMap[code]?.[dateStr]?.close
-      if (close && h.quantity > 0) totalVal += close * h.quantity
+      if (close && qty > 0) totalVal += close * qty
     }
-    const dailyPnl = totalVal - totalCost
-    const totalProfit = prevTotalProfit + dailyPnl
+    const floatingProfit = totalVal - totalCost
+    const totalProfit = realizedProfit + floatingProfit
+
+    // 当日 P&L（相对前一天 totalProfit）
+    let dailyPnl = 0
+    if (points.length > 0) {
+      dailyPnl = totalProfit - points[points.length - 1].totalProfit
+    } else {
+      // 首点：当日开始持仓之前的 total = 0，所以 dailyPnl = totalProfit - 0
+      dailyPnl = totalProfit - dailyRealized
+    }
 
     points.push({
       date: dateStr,
       pnl: dailyPnl,
       totalProfit,
       totalCost: totalCost || 0,
-      pnlPct: totalCost > 0 ? (dailyPnl / totalCost) * 100 : 0,
+      pnlPct: cumulativeBuyAmount > 0 ? (totalProfit / cumulativeBuyAmount) * 100 : 0,
     })
 
-    prevTotalProfit = totalProfit
     curDate.setDate(curDate.getDate() + 1)
   }
 
