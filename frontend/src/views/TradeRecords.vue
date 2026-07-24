@@ -1207,34 +1207,7 @@ function onDivDialogClosed() {
 // 实时行情缓存 { code: { price, change_pct, name } }
 const quotes = ref({})
 
-// 估值信号缓存 { code: { band, pe/pb/percentile } }
-const holdingsSignals = ref({})
-
-// ETF → 追踪的宽基指数代码（经验映射）
-const ETF_TO_INDEX = {
-  '512000': '000300', '512880': '000300', '510300': '000300',
-  '159915': '399006',
-  '510050': '000016',
-}
-
-async function loadSignals() {
-  try {
-    const { data } = await axios.get('/api/valuation/watchlist/signals')
-    const sigMap = {}
-    for (const s of (data.watchlist_signals || [])) {
-      sigMap[s.code] = s
-    }
-    holdingsSignals.value = sigMap
-  } catch (e) {
-    console.error('loadSignals failed', e)
-  }
-}
-
-const BAND_MAP = {
-  extreme_low: '极度低估', low: '低估', normal: '正常',
-  high: '高估', extreme_high: '极度高估', unknown: '暂无',
-}
-function bandLabel(band) { return BAND_MAP[band] || band || '—' }
+// 注：PE 估值体系已于 2026-07-21 移除，相关 holdingsSignals/loadSignals/BAND_MAP 同步清理
 
 /**
  * 持仓成本计算（FIFO 逻辑）
@@ -1414,7 +1387,6 @@ async function loadQuotes() {
   )
 
   quotes.value = results
-  loadSignals()  // 同步刷新信号
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -2152,7 +2124,6 @@ async function doLink(idx) {
     await linkIndex(linkDialog.value.id, idx.code)
     ElMessage.success(`已关联「${idx.name}」`)
     linkDialog.value.visible = false
-    loadSignals()
   } catch (e) {
     ElMessage.error('关联失败：' + (e.message || e))
   }
@@ -2162,9 +2133,8 @@ async function doUnlink() {
   if (!confirm(`取消「${linkDialog.value.name}」的指数关联？`)) return
   try {
     await linkIndex(linkDialog.value.id, null)
-    ElMessage.success('已取消关联')
     linkDialog.value.visible = false
-    loadSignals()
+    ElMessage.success('已取消关联')
   } catch { ElMessage.error('操作失败') }
 }
 
@@ -2183,7 +2153,6 @@ function formatUpdated(dt) {
 onMounted(async () => {
   await loadTrades()
   loadWatchlist()
-  loadSignals()
   loadAvailableIndices()
   loadEquityCurve()
 
@@ -2197,9 +2166,11 @@ onMounted(async () => {
   }
   window.addEventListener('resize', handleResize)
 
-  onUnmounted(() => {
-    dividendChartInst?.dispose()
   })
+
+// 卸载时清理图表实例
+onUnmounted(() => {
+  dividendChartInst?.dispose()
 })
 </script>
 
