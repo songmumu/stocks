@@ -563,10 +563,10 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getTrades, addTrade, addTradesBatch, deleteTrade, getWatchlist, getStockHistory, getRealtimeQuote, getIndexValuation, getDividends, addDividend } from '../api/index.js'
+import { getTrades, addTrade, addTradesBatch, deleteTrade, getWatchlist, getStockHistory, getRealtimeQuote, getDividends, addDividend } from '../api/index.js'
 import { getAvailableIndices, linkIndex } from '../api/index.js'
 import axios from 'axios'
-import * as echarts from 'echarts'
+import echarts from '../utils/echarts'
 
 const trades = ref([])
 const watchlist = ref([])

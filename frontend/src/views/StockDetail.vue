@@ -208,7 +208,7 @@
 <script setup>
 import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import * as echarts from 'echarts'
+import echarts from '../utils/echarts'
 import { getWatchlist, getRealtimeQuote, getStockHistory, getTrades } from '../api/index.js'
 
 const route = useRoute()

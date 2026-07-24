@@ -104,7 +104,7 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
-import * as echarts from 'echarts'
+import echarts from '../utils/echarts'
 import { getCurrentIndices, getIndexHistory } from '../api/index.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 

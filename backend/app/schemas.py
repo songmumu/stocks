@@ -101,52 +101,6 @@ class MarketIndexOut(BaseModel):
     change_pct: float
 
 
-# ── 估值 ──
-
-class IndexValuationOut(BaseModel):
-    """单个宽基指数的 PE/PB 估值，含历史分位"""
-    code: str           # 如 000300
-    name: str           # 如 沪深300
-    secid: str          # 腾讯 secid，如 sh000300
-    price: Optional[float]
-    pct: Optional[float]       # 今日涨跌%
-    pe: Optional[float]
-    pb: Optional[float]
-    pe_pct: Optional[float]    # PE 历史分位（0-100）
-    pb_pct: Optional[float]    # PB 历史分位（0-100）
-    history_days: int = 0       # 快照历史天数
-    band: str = "unknown"     # extreme_low/low/normal/high/extreme_high/unknown
-
-
-class FundValuationOut(BaseModel):
-    """场外主动基金的 NAV 分位"""
-    code: str
-    nav: float
-    change_pct: float
-    percentile: Optional[float]   # NAV 历史分位
-    history_count: int
-    valid: bool
-    band: str = "unknown"
-
-
-# ── 用户手动填写的 10 年历史分位 ──
-
-class HoldingPercentileUpdate(BaseModel):
-    """手动填写分位：PE / PB（0-100），指数分位专用"""
-    pe_pct: Optional[float] = Field(None, ge=0, le=100)
-    pb_pct: Optional[float] = Field(None, ge=0, le=100)
-    note: Optional[str] = ""
-
-
-class HoldingPercentileOut(BaseModel):
-    code: str
-    pe_pct: Optional[float] = None
-    pb_pct: Optional[float] = None
-    note: str = ""
-    updated_at: Optional[datetime] = None
-
-    model_config = {"from_attributes": True}
-
 
 # ── 自选指数 ──
 

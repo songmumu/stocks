@@ -1,7 +1,7 @@
 <template>
   <div id="app-root">
     <el-container style="min-height: 100vh">
-      <el-header v-if="route.path !== '/login'" style="background: #1a1a2e; color: #fff; display: flex; align-items: center; padding: 0 24px; height: 56px; gap: 12px;">
+      <el-header v-if="route.path !== '/login'" class="app-header" style="background: #1a1a2e; color: #fff; display: flex; align-items: center; padding: 0 24px; height: 56px; gap: 12px;">
         <div style="font-size: 18px; font-weight: 700; letter-spacing: 1px;">📊 交易分析</div>
         <el-menu
           :default-active="route.path"
@@ -11,10 +11,10 @@
           @select="onMenuSelect"
         >
           <el-menu-item index="/">📈 大盘</el-menu-item>
-          <el-menu-item index="/stocks">自选</el-menu-item>
-          <el-menu-item index="/trades">交易记录</el-menu-item>
+          <el-menu-item index="/stocks">⭐ 自选</el-menu-item>
+          <el-menu-item index="/trades">📋 交易记录</el-menu-item>
           <el-menu-item index="/portfolio">💼 我的持仓</el-menu-item>
-          <el-menu-item index="/index-valuation">📊 指数估值</el-menu-item>
+          <el-menu-item index="/my-returns">💹 我的收益</el-menu-item>
         </el-menu>
         <div class="nav-right">
           <template v-if="loggedIn">
@@ -32,9 +32,9 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getToken, setToken, logoutApi, getUsername, setUsername, setRole, getMe } from './api'
+import { getToken, setToken, logoutApi, getUsername, setUsername, setRole, getMe, isLoggedIn } from './api'
 
 const route = useRoute()
 const router = useRouter()
@@ -53,10 +53,29 @@ async function syncUserFromMe() {
   }
 }
 
-onMounted(syncUserFromMe)
+// 页面可见性变化时检测 token 过期（切回页面时）
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    // 页面重新可见，检查登录态
+    if (!isLoggedIn() && loggedIn.value) {
+      loggedIn.value = false
+      username.value = ''
+      router.replace('/login')
+    }
+  }
+}
+
+onMounted(() => {
+  syncUserFromMe()
+  document.addEventListener('visibilitychange', onVisibilityChange)
+})
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+})
+
 // 路由变化时同步登录态（登录/退出后导航栏即时更新）
 watch(() => route.path, () => {
-  loggedIn.value = !!getToken()
+  loggedIn.value = isLoggedIn()
   username.value = getUsername()
 })
 
@@ -77,4 +96,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .el-menu--horizontal .el-menu-item:hover { color: #fff !important; background: transparent !important; }
 .nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .nav-user { color: rgba(255,255,255,.85); font-size: 13px; }
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
 </style>

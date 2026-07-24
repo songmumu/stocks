@@ -36,7 +36,23 @@ export function setUsername(name) {
   else localStorage.removeItem(USER_KEY)
 }
 export function isLoggedIn() {
-  return !!getToken()
+  const token = getToken()
+  if (!token) return false
+  
+  // 检查 token 是否过期
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    if (payload.exp && payload.exp * 1000 < Date.now()) {
+      // token 已过期，清除
+      setToken(null)
+      return false
+    }
+    return true
+  } catch (e) {
+    // token 格式错误，清除
+    setToken(null)
+    return false
+  }
 }
 
 // 自动附带 Bearer token
@@ -86,28 +102,12 @@ export function getStockHistory(code, days = 120) {
   return api.get(`/stocks/history/${code}`, { params: { days } })
 }
 
-// ── 估值 ──
-export function getIndexValuation() {
-  return api.get('/valuation/indices')
-}
-
 // ── 指数关联 ──
 export function getAvailableIndices() {
   return api.get('/stocks/available-indices')
 }
 export function linkIndex(stockId, indexCode) {
   return api.put(`/stocks/watchlist/${stockId}/link-index`, { index_code: indexCode })
-}
-
-// ── 手动填写的 10 年分位 ──
-export function getHoldingPercentile(code) {
-  return api.get(`/valuation/holding-percentile/${code}`)
-}
-export function updateHoldingPercentile(code, data) {
-  return api.put(`/valuation/holding-percentile/${code}`, data)
-}
-export function deleteHoldingPercentile(code) {
-  return api.delete(`/valuation/holding-percentile/${code}`)
 }
 
 // ── 交易记录 ──
@@ -134,11 +134,12 @@ export function addDividend(data) {
 export function getPortfolioHoldings() {
   return api.get('/portfolio/holdings')
 }
+
+export function getPortfolioPrices() {
+  return api.get('/portfolio/prices')
+}
 export function getPortfolioAdvices(manualTypes = {}) {
   return api.post('/portfolio/advices', { manual_types: manualTypes })
-}
-export function getPortfolioPEInfo(code) {
-  return api.get(`/portfolio/pe-info/${code}`)
 }
 export function updatePortfolioPeak(code, currentProfit) {
   return api.post('/portfolio/update-peak', null, { params: { code, current_profit: currentProfit } })

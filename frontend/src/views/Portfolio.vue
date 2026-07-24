@@ -3,16 +3,10 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <div>
-        <h1 class="page-title">📊 我的持仓</h1>
-        <p class="page-subtitle">基于 PE 分位 + 动态回撤的智能决策系统</p>
+        <h1 class="page-title">💼 我的持仓</h1>
+        <p class="page-subtitle">移动止盈 + 硬止损 · 波段仓 · 纯回撤策略</p>
       </div>
       <div class="header-actions">
-        <el-button plain size="small">
-          ⚙️ 设置
-        </el-button>
-        <el-button type="primary" size="small">
-          📋 编辑规则
-        </el-button>
         <el-button @click="loadData" :loading="loading" circle>
           <span v-html="refreshIcon"></span>
         </el-button>
@@ -41,13 +35,19 @@
             <div class="overview-value" :class="summary.total_profit >= 0 ? 'up' : 'down'">
               {{ summary.total_profit >= 0 ? '+' : '-' }}¥{{ formatMoney(summary.total_profit) }}
             </div>
-            <div class="overview-label">累计浮盈</div>
+            <div class="overview-label">持仓浮盈</div>
           </div>
           <div class="overview-item">
-            <div class="overview-value" :class="summary.total_profit_pct >= 0 ? 'up' : 'down'">
-              {{ summary.total_profit_pct >= 0 ? '+' : '-' }}{{ Math.abs(summary.total_profit_pct).toFixed(2) }}%
+            <div class="overview-value" :class="summary.total_return >= 0 ? 'up' : 'down'">
+              {{ summary.total_return >= 0 ? '+' : '-' }}¥{{ formatMoney(summary.total_return) }}
             </div>
-            <div class="overview-label">整体收益率</div>
+            <div class="overview-label">累计收益（含已清仓）</div>
+          </div>
+          <div class="overview-item">
+            <div class="overview-value" :class="summary.total_return_pct >= 0 ? 'up' : 'down'">
+              {{ summary.total_return_pct >= 0 ? '+' : '-' }}{{ Math.abs(summary.total_return_pct).toFixed(2) }}%
+            </div>
+            <div class="overview-label">累计收益率</div>
           </div>
           <div class="overview-item">
             <div class="overview-value warning">{{ summary.need_action_count || 0 }}</div>
@@ -124,9 +124,11 @@
               </span>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="A">A类 宽基</el-dropdown-item>
-                  <el-dropdown-item command="B">B类 成长</el-dropdown-item>
-                  <el-dropdown-item command="C">C类 窄基</el-dropdown-item>
+                  <el-dropdown-item command="A">A类 大盘宽基ETF</el-dropdown-item>
+                  <el-dropdown-item command="B">B类 科创创业ETF</el-dropdown-item>
+                  <el-dropdown-item command="C">C类 科技赛道ETF</el-dropdown-item>
+                  <el-dropdown-item command="D">D类 恒生科技ETF</el-dropdown-item>
+                  <el-dropdown-item command="E">E类 红利ETF</el-dropdown-item>
                   <el-dropdown-item v-if="hasManualType(item.code)" command="" divided>
                     恢复自动判定
                   </el-dropdown-item>
@@ -145,26 +147,8 @@
               <div class="metric-label">浮盈</div>
               <div class="metric-value" :class="item.current_profit >= 0 ? 'up' : 'down'">
                 {{ item.current_profit >= 0 ? '+' : '-' }}¥{{ formatMoney(item.current_profit) }}
+                <span class="metric-pct">({{ item.current_profit >= 0 ? '+' : '' }}{{ item.profit_pct.toFixed(2) }}%)</span>
               </div>
-            </div>
-          </div>
-
-          <!-- PE 分位条 -->
-          <div class="pe-bar" v-if="item.pe_pct !== null">
-            <div class="pe-bar-header">
-              <span>PE分位：<strong>{{ item.pe_pct.toFixed(1) }}%</strong></span>
-              <span :class="getBandClass(item.pe_band)">{{ getBandName(item.pe_band) }}</span>
-            </div>
-            <div class="pe-track">
-              <div class="pe-fill" :class="getBandClass(item.pe_band)" :style="{ width: item.pe_pct + '%' }"></div>
-            </div>
-            <div class="pe-markers">
-              <span>0%</span><span>30%</span><span>70%</span><span>100%</span>
-            </div>
-          </div>
-          <div v-else class="pe-bar">
-            <div class="pe-bar-header">
-              <span class="no-pe">暂无 PE 分位数据</span>
             </div>
           </div>
 
@@ -175,11 +159,20 @@
               <span v-if="item.action_ratio && item.action_ratio > 1" class="action-ratio">
                 ×{{ item.action_ratio }}
               </span>
-              <span v-if="item.action_ratio && item.action_ratio < 1" class="action-ratio">
-                -{{ (item.action_ratio * 100).toFixed(0) }}%
+              <span v-if="item.action_ratio && item.action_ratio < 1 && item.action_ratio > 0" class="action-ratio">
+                ×{{ (item.action_ratio * 1).toFixed(1) }}
               </span>
             </div>
             <div class="action-desc">{{ item.action_desc }}</div>
+          </div>
+
+          <!-- 预警提醒 -->
+          <div v-if="item.warnings && item.warnings.length > 0" class="warnings-box">
+            <div
+              v-for="(w, wi) in item.warnings"
+              :key="wi"
+              class="warning-item"
+            >{{ w }}</div>
           </div>
 
           <!-- 回撤状态 -->
@@ -198,32 +191,75 @@
         </div>
       </div>
 
-      <!-- 规则说明 -->
+      <!-- 规则说明（5档） -->
       <div class="rules-section">
         <div class="rules-title">📖 规则速查</div>
         <div class="rules-grid">
           <div class="rule-card">
-            <div class="rule-type type-a">A类 宽基规则</div>
+            <div class="rule-type type-a">A类 大盘宽基ETF</div>
             <div class="rule-content">
-              <div>加仓：≤20% ×2.0 / 20-30% ×1.5 / 30-70% ×1.0</div>
-              <div>止盈：70-80% 卖1/3 / 80-90% 卖1/3 / >90% 清仓</div>
-              <div>重启：PE ≤ 30%</div>
+              <div class="rule-sub-title">止盈（三重模式，满足任一即执行）</div>
+              <div>1️⃣ 目标：回撤<strong>12%</strong>→减40% / <strong>18%</strong>→全部清仓波段仓</div>
+              <div>2️⃣ 均线：跌破MA20→全部清仓；破MA10观察3日</div>
+              <div>3️⃣ 极端：跌幅≥5%+量放≥1.5倍→尾盘减50%</div>
+              <div class="rule-sub-title">止损（三重模式）</div>
+              <div>硬性止损：浮亏<strong>-8%</strong>→无条件清仓</div>
+              <div class="rule-sub-title">买入</div>
+              <div>回落6%~10%介入，长线定投≥14%回撤启动</div>
             </div>
           </div>
           <div class="rule-card">
-            <div class="rule-type type-b">B类 成长规则</div>
+            <div class="rule-type type-b">B类 科创50/创业板ETF</div>
             <div class="rule-content">
-              <div>加仓：同A类</div>
-              <div>止盈：75-85% 卖1/3 / 85-90% 卖1/3 / >90% 清仓</div>
-              <div>重启：PE ≤ 30%</div>
+              <div class="rule-sub-title">止盈（三重模式，满足任一即执行）</div>
+              <div>1️⃣ 目标：回撤<strong>13%</strong>→减40% / <strong>20%</strong>→全部清仓波段仓</div>
+              <div>2️⃣ 均线：跌破MA20→全部清仓；破MA10观察3日</div>
+              <div>3️⃣ 极端：跌幅≥6%+换手≥7%→尾盘减60%</div>
+              <div class="rule-sub-title">止损（三重模式）</div>
+              <div>硬性止损：浮亏<strong>-8%</strong>→无条件清仓</div>
+              <div class="rule-sub-title">买入</div>
+              <div>回落7%~11%介入，长线定投≥16%回撤启动</div>
             </div>
           </div>
           <div class="rule-card">
-            <div class="rule-type type-c">C类 窄基规则</div>
+            <div class="rule-type type-c">C类 科技赛道ETF</div>
             <div class="rule-content">
-              <div>加仓：≤25% ×1.5 / 25-40% ×1.0 / 40-70% ×0.5</div>
-              <div>止盈：70-80% 卖1/2 / >80% 清仓</div>
-              <div>重启：PE ≤ 25%</div>
+              <div class="rule-sub-title">止盈（三重模式，满足任一即执行）</div>
+              <div>1️⃣ 目标：回撤<strong>15%</strong>→减40% / <strong>25%</strong>→全部清仓波段仓</div>
+              <div>2️⃣ 均线：跌破MA10→减半仓；跌破MA20→清仓</div>
+              <div>3️⃣ 极端：跌幅≥7%+换手≥8%→尾盘减70%</div>
+              <div class="rule-sub-title special-clear">🔥特殊清仓</div>
+              <div>换手率≥7%+放量滞涨→跳过止盈，直接全部清仓</div>
+              <div class="rule-sub-title">止损（三重模式）</div>
+              <div>硬性止损：浮亏<strong>-9%</strong>→无条件清仓</div>
+              <div class="rule-sub-title">买入</div>
+              <div>回落8%~12%介入，长线定投≥18%回撤启动</div>
+            </div>
+          </div>
+          <div class="rule-card">
+            <div class="rule-type type-d">D类 恒生科技ETF</div>
+            <div class="rule-content">
+              <div class="rule-sub-title">止盈（三重模式，满足任一即执行）</div>
+              <div>1️⃣ 目标：回撤<strong>15%</strong>→减40% / <strong>25%</strong>→全部清仓波段仓</div>
+              <div>2️⃣ 均线：跌破MA10→减半仓(3日未收清)；破MA20→全部清仓</div>
+              <div>3️⃣ 极端：跌幅≥6%+量放→减50%</div>
+              <div class="rule-sub-title">止损（三重模式）</div>
+              <div>硬性止损：浮亏<strong>-9%</strong>→无条件清仓</div>
+              <div class="rule-sub-title">买入</div>
+              <div>回落8%~13%介入，长线定投≥20%回撤启动</div>
+            </div>
+          </div>
+          <div class="rule-card">
+            <div class="rule-type type-e">E类 红利ETF</div>
+            <div class="rule-content">
+              <div class="rule-sub-title">止盈（三重模式，满足任一即执行）</div>
+              <div>1️⃣ 目标：回撤<strong>20%</strong>→减40% / <strong>30%</strong>→全部清仓波段仓</div>
+              <div>2️⃣ 均线：跌破MA20→全部清仓；破MA10观察5日</div>
+              <div>3️⃣ 极端：跌幅≥4%+量放≥1.4倍→尾盘减50%</div>
+              <div class="rule-sub-title">止损（三重模式）</div>
+              <div>硬性止损：浮亏<strong>-6%</strong>→无条件清仓</div>
+              <div class="rule-sub-title">买入</div>
+              <div>回落5%~8%介入，低估值+分红率≥3%时定投</div>
             </div>
           </div>
         </div>
@@ -245,6 +281,8 @@ const summary = reactive({
   total_market_value: 0,
   total_profit: 0,
   total_profit_pct: 0,
+  total_return: 0,
+  total_return_pct: 0,
   need_action_count: 0
 })
 
@@ -253,7 +291,6 @@ const refreshIcon = '🔄'
 async function loadData() {
   loading.value = true
   try {
-    // 并行请求
     const [holdingsRes, advicesRes] = await Promise.all([
       getPortfolioHoldings(),
       getPortfolioAdvices(manualTypes.value)
@@ -264,6 +301,8 @@ async function loadData() {
     summary.total_market_value = holdingsRes.data.total_market_value || 0
     summary.total_profit = holdingsRes.data.total_profit || 0
     summary.total_profit_pct = holdingsRes.data.total_profit_pct || 0
+    summary.total_return = holdingsRes.data.total_return || 0
+    summary.total_return_pct = holdingsRes.data.total_return_pct || 0
 
     advices.value = advicesRes.data.holdings || []
     summary.need_action_count = advicesRes.data.summary?.need_action_count || 0
@@ -288,15 +327,19 @@ function getHoldingValue(code) {
 const typeDistribution = computed(() => {
   const total = summary.total_market_value || 0
   if (!total || !advices.value.length) return []
-  // 按类型汇总市值
   const map = {}
   for (const item of advices.value) {
     const t = item.index_type || 'A'
     map[t] = (map[t] || 0) + (item.market_value || 0)
   }
-  // 产出顺序 A → B → C
-  const order = ['A', 'B', 'C']
-  const fullName = { A: 'A类 宽基', B: 'B类 成长', C: 'C类 窄基' }
+  const order = ['A', 'B', 'C', 'D', 'E']
+  const fullName = {
+    A: 'A类 大盘宽基ETF',
+    B: 'B类 科创创业ETF',
+    C: 'C类 科技赛道ETF',
+    D: 'D类 恒生科技ETF',
+    E: 'E类 红利ETF',
+  }
   return order
     .filter(t => map[t])
     .map(t => ({
@@ -308,7 +351,7 @@ const typeDistribution = computed(() => {
 })
 
 function getTypeClass(type) {
-  return `type-${type.toLowerCase()}`
+  return `type-${(type || 'A').toLowerCase()}`
 }
 
 // ── 手动类型覆盖（localStorage 持久化）──
@@ -328,10 +371,6 @@ function saveTypeOverrides() {
   localStorage.setItem(TYPE_OVERRIDE_KEY, JSON.stringify(manualTypes.value))
 }
 
-function getEffectiveType(item) {
-  return manualTypes.value[item.code] || item.index_type
-}
-
 function hasManualType(code) {
   return Object.prototype.hasOwnProperty.call(manualTypes.value, code)
 }
@@ -343,74 +382,51 @@ function setManualType(code, type) {
     manualTypes.value[code] = type
   }
   saveTypeOverrides()
-  ElMessage.success(type ? `已手动设为 ${getTypeFullName(type)}` : '已恢复自动判定')
-  // 重新拉取建议以应用新类型
+  ElMessage.success(type ? `已设为 ${getTypeFullName(type)}` : '已恢复自动判定')
   loadData()
 }
 
 function getTypeName(type) {
-  const map = { A: '宽基', B: '成长', C: '窄基' }
-  return map[type] || type
+  const map = { A: '宽基', B: '科创', C: '赛道', D: '恒科', E: '红利' }
+  return map[type] || '宽基'
 }
 
 function getTypeFullName(type) {
-  const map = { A: 'A类 宽基', B: 'B类 成长', C: 'C类 窄基' }
-  return map[type] || type
-}
-
-function getBandClass(band) {
   const map = {
-    'extreme_low': 'low',
-    'low': 'low',
-    'normal': 'normal',
-    'high': 'high',
-    'extreme_high': 'extreme',
-    'unknown': 'normal'
+    A: 'A类 大盘宽基ETF',
+    B: 'B类 科创创业ETF',
+    C: 'C类 科技赛道ETF',
+    D: 'D类 恒生科技ETF',
+    E: 'E类 红利ETF',
   }
-  return map[band] || 'normal'
-}
-
-function getBandName(band) {
-  const map = {
-    'extreme_low': '极度低估',
-    'low': '低估',
-    'normal': '合理',
-    'high': '高估',
-    'extreme_high': '极度高估',
-    'unknown': '未知'
-  }
-  return map[band] || '未知'
+  return map[type] || map['A']
 }
 
 function getActionIcon(action) {
   const map = {
-    '加倍买入': '✅',
-    '加半买入': '✅',
-    '正常持有': '📊',
-    '减半持有': '📉',
-    '持仓观望': '👀',
+    '持有': '📊',
     '减仓': '📤',
-    '大幅减仓': '📤',
-    '清仓': '🧹'
+    '清仓': '🧹',
+    '止损清仓': '🛑',
+    '观察': '👁',
   }
   return map[action] || '📊'
 }
 
 function getActionClass(action) {
-  if (action.includes('买入')) return 'action-buy'
   if (action.includes('清仓')) return 'action-sell-all'
-  if (action.includes('减仓') || action.includes('大幅')) return 'action-sell'
-  if (action.includes('观望')) return 'action-watch'
+  if (action.includes('减仓')) return 'action-sell'
+  if (action === '观察') return 'action-watch'
   return 'action-hold'
 }
 
 function isNeedAction(action) {
-  return ['加倍买入', '加半买入', '减仓', '大幅减仓', '清仓'].includes(action)
+  return ['减仓', '清仓', '止损清仓', '观察'].includes(action)
 }
 
 function getDrawdownClass(pct) {
-  if (pct <= 15) return 'green'
-  if (pct <= 25) return 'yellow'
+  if (pct <= 10) return 'green'
+  if (pct <= 20) return 'yellow'
   if (pct <= 40) return 'orange'
   return 'red'
 }
@@ -534,6 +550,8 @@ onMounted(() => {
 .type-bar-segment.type-a { background: #22c55e; }
 .type-bar-segment.type-b { background: #3b82f6; }
 .type-bar-segment.type-c { background: #ec4899; }
+.type-bar-segment.type-d { background: #f59e0b; }
+.type-bar-segment.type-e { background: #06b6d4; }
 
 .type-legend {
   display: flex;
@@ -563,6 +581,8 @@ onMounted(() => {
 .type-dot.type-a { background: #22c55e; }
 .type-dot.type-b { background: #3b82f6; }
 .type-dot.type-c { background: #ec4899; }
+.type-dot.type-d { background: #f59e0b; }
+.type-dot.type-e { background: #06b6d4; }
 
 .type-name {
   font-weight: 500;
@@ -684,6 +704,8 @@ onMounted(() => {
 .stock-avatar.type-a { background: linear-gradient(135deg, #4ade80, #22c55e); }
 .stock-avatar.type-b { background: linear-gradient(135deg, #60a5fa, #3b82f6); }
 .stock-avatar.type-c { background: linear-gradient(135deg, #f472b6, #ec4899); }
+.stock-avatar.type-d { background: linear-gradient(135deg, #fbbf24, #f59e0b); }
+.stock-avatar.type-e { background: linear-gradient(135deg, #22d3ee, #06b6d4); }
 
 .stock-name {
   font-size: 16px;
@@ -732,6 +754,8 @@ onMounted(() => {
 .stock-type.type-a { background: #dcfce7; color: #166534; }
 .stock-type.type-b { background: #dbeafe; color: #1e40af; }
 .stock-type.type-c { background: #fce7f3; color: #9d174d; }
+.stock-type.type-d { background: #fef3c7; color: #92400e; }
+.stock-type.type-e { background: #ecfeff; color: #0e7490; }
 
 /* 指标行 */
 .metrics-row {
@@ -761,51 +785,11 @@ onMounted(() => {
 .metric-value.up { color: #ef4444; }
 .metric-value.down { color: #22c55e; }
 
-/* PE 条 */
-.pe-bar {
-  margin-bottom: 16px;
-}
-
-.pe-bar-header {
-  display: flex;
-  justify-content: space-between;
+.metric-pct {
   font-size: 12px;
-  color: #666;
-  margin-bottom: 6px;
-}
-
-.pe-bar-header strong {
-  color: #1a1a2e;
-}
-
-.pe-bar-header .no-pe {
-  color: #999;
-}
-
-.pe-track {
-  height: 8px;
-  background: #e8e8ee;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.pe-fill {
-  height: 100%;
-  border-radius: 4px;
-  transition: width 0.3s;
-}
-
-.pe-fill.low { background: linear-gradient(90deg, #22c55e, #4ade80); }
-.pe-fill.normal { background: linear-gradient(90deg, #facc15, #fde047); }
-.pe-fill.high { background: linear-gradient(90deg, #f97316, #fb923c); }
-.pe-fill.extreme { background: linear-gradient(90deg, #ef4444, #f87171); }
-
-.pe-markers {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: #999;
-  margin-top: 4px;
+  font-weight: 500;
+  opacity: 0.7;
+  margin-left: 4px;
 }
 
 /* 操作建议 */
@@ -817,7 +801,6 @@ onMounted(() => {
   margin-bottom: 12px;
 }
 
-.action-box.action-buy { background: #f0fdf4; border-color: #bbf7d0; }
 .action-box.action-hold { background: #f0f9ff; border-color: #bae6fd; }
 .action-box.action-watch { background: #fef9c3; border-color: #fde047; }
 .action-box.action-sell { background: #fff7ed; border-color: #fed7aa; }
@@ -843,6 +826,28 @@ onMounted(() => {
   font-size: 12px;
   color: #666;
   line-height: 1.5;
+}
+
+/* 预警提醒 */
+.warnings-box {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+
+.warning-item {
+  font-size: 12px;
+  color: #92400e;
+  line-height: 1.6;
+  padding: 2px 0;
+}
+
+.warning-item:not(:last-child) {
+  border-bottom: 1px dashed #fde68a;
+  margin-bottom: 4px;
+  padding-bottom: 6px;
 }
 
 /* 回撤状态 */
@@ -905,18 +910,18 @@ onMounted(() => {
 
 .rules-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
 }
 
 .rule-card {
-  padding: 16px;
+  padding: 14px;
   background: #f9fafb;
   border-radius: 8px;
 }
 
 .rule-type {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   margin-bottom: 8px;
 }
@@ -924,15 +929,40 @@ onMounted(() => {
 .rule-type.type-a { color: #166534; }
 .rule-type.type-b { color: #1e40af; }
 .rule-type.type-c { color: #9d174d; }
+.rule-type.type-d { color: #92400e; }
+.rule-type.type-e { color: #0e7490; }
 
 .rule-content {
-  font-size: 12px;
-  color: #666;
-  line-height: 1.6;
+  font-size: 11px;
+  color: #555;
+  line-height: 1.7;
 }
 
 .rule-content div {
-  margin-bottom: 4px;
+  margin-bottom: 3px;
+}
+
+.rule-content strong {
+  color: #1a1a2e;
+  font-weight: 600;
+}
+
+.rule-sub-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 6px !important;
+  margin-bottom: 2px !important;
+}
+
+.rule-content .special-clear {
+  color: #dc2626;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 /* 响应式 */

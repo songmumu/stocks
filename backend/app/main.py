@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from app.database import init_db, SessionLocal
-from app.routers import stocks, market, trades, valuation, watchlist_signals, holding_percentiles, custom_indices, portfolio, auth, users
+from app.routers import stocks, market, trades, custom_indices, portfolio, auth, users
 from app.models import User
 from app.auth import hash_password, get_current_user
 
@@ -58,9 +58,6 @@ app.add_middleware(
 app.include_router(stocks.router)
 app.include_router(market.router)
 app.include_router(trades.router)
-app.include_router(valuation.router)
-app.include_router(watchlist_signals.router)
-app.include_router(holding_percentiles.router)
 app.include_router(custom_indices.router)
 app.include_router(portfolio.router)
 app.include_router(auth.router)

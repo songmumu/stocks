@@ -5,22 +5,8 @@ from typing import List
 from datetime import datetime
 
 from app.database import get_db
+from app.services.eastmoney_service import fetch_and_save_price_history
 from app.models import WatchlistStock, CustomIndex
-from app.services.valuation_service import fetch_index_valuation
-from app.models import HoldingPercentile
-
-# 内联获取所有可用指数（7固定+自定义），供前端关联选择器使用
-from app.routers.valuation import _fetch_single_index, _secid
-
-_FIXED_INDICES = [
-    {"code": "000300", "name": "沪深300"},
-    {"code": "000016", "name": "上证50"},
-    {"code": "399001", "name": "深证成指"},
-    {"code": "399006", "name": "创业板指"},
-    {"code": "000688", "name": "科创50"},
-    {"code": "000905", "name": "中证500"},
-    {"code": "000852", "name": "中证1000"},
-]
 from app.schemas import WatchlistStockCreate, WatchlistStockUpdate, WatchlistStockOut
 from app.services.eastmoney_service import (
     fetch_realtime_quote,
@@ -30,6 +16,17 @@ from app.services.eastmoney_service import (
 )
 
 router = APIRouter(prefix="/api/stocks", tags=["自选股"])
+
+# 固定宽基指数列表
+_FIXED_INDICES = [
+    {"code": "000300", "name": "沪深300"},
+    {"code": "000016", "name": "上证50"},
+    {"code": "399001", "name": "深证成指"},
+    {"code": "399006", "name": "创业板指"},
+    {"code": "000688", "name": "科创50"},
+    {"code": "000905", "name": "中证500"},
+    {"code": "000852", "name": "中证1000"},
+]
 
 
 @router.get("/search")
@@ -83,6 +80,11 @@ def add_watchlist(item: WatchlistStockCreate, db: Session = Depends(get_db)):
     db.add(stock)
     db.commit()
     db.refresh(stock)
+    # 自动拉取3年K线入库（用于均线/放量预警）
+    try:
+        fetch_and_save_price_history(db, item.code)
+    except Exception:
+        pass  # K线入库失败不影响添加自选
     return stock
 
 
@@ -111,32 +113,20 @@ def update_watchlist(stock_id: int, item: WatchlistStockUpdate, db: Session = De
     return stock
 
 
-@router.get("/available-indices", tags=["指数"])
+@router.get("/available-indices")
 def available_indices(db: Session = Depends(get_db)):
     """
-    返回所有可关联的指数（固定7个 + 用户自定义），
-    含实时 PE/PB 和是否有分位数据。
+    返回所有可关联的指数（固定7个 + 用户自定义）。
     """
-    # 固定
     result = [{"code": i["code"], "name": i["name"], "is_fixed": True} for i in _FIXED_INDICES]
-    # 自定义
     for row in db.query(CustomIndex).all():
         result.append({"code": row.code, "name": row.name, "is_fixed": False})
-    # 注入手动分位
-    for item in result:
-        hp = db.query(HoldingPercentile).filter(HoldingPercentile.code == item["code"]).first()
-        item["pe_pct"] = hp.pe_pct if hp else None
-        item["pb_pct"] = hp.pb_pct if hp else None
-        item["has_pct"] = hp is not None
     return result
 
 
-@router.put("/watchlist/{stock_id}/link-index", response_model=WatchlistStockOut, tags=["指数"])
+@router.put("/watchlist/{stock_id}/link-index", response_model=WatchlistStockOut)
 def link_index(stock_id: int, payload: dict, db: Session = Depends(get_db)):
-    """
-    设置/取消自选股的关联指数。
-    payload: { "index_code": "000300" }  或  { "index_code": null } 取消关联
-    """
+    """设置/取消自选股的关联指数。"""
     stock = db.query(WatchlistStock).filter(WatchlistStock.id == stock_id).first()
     if not stock:
         raise HTTPException(404, "未找到该自选股")

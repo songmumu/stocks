@@ -35,34 +35,6 @@ class TradeRecord(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
-class IndexValuationSnapshot(Base):
-    """指数 PE/PB 历史快照（每日一档）
-    长期积累后可计算 10 年分位。初始默认以 Tencent API 为实时源。
-    """
-    __tablename__ = "index_valuation_snapshots"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    code = Column(String(8), nullable=False, index=True)       # 如 000300
-    snapshot_date = Column(Date, nullable=False, index=True)
-    pe = Column(Float, nullable=True)
-    pb = Column(Float, nullable=True)
-    source = Column(String(16), default="tencent")             # tencent / seed
-    created_at = Column(DateTime, server_default=func.now())
-
-
-class HoldingPercentile(Base):
-    """用户手动填写的 10 年历史分位（场外基金 NAV / 个股 PE-PB / ETF 映射指数 PE-PB）
-
-    优先级高于自动计算的估值，自动信号降级为参考。
-    """
-    __tablename__ = "holding_percentiles"
-
-    code = Column(String(12), primary_key=True)                # 指数代码（如 000300）
-    pe_pct = Column(Float, nullable=True)                       # PE 10 年分位 0-100
-    pb_pct = Column(Float, nullable=True)                       # PB 10 年分位 0-100
-    note = Column(String(255), default="")                      # 备注：数据来源 / 估值日期
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-
 
 class CustomIndex(Base):
     """用户自选添加的宽基/行业指数"""
@@ -92,6 +64,21 @@ class PortfolioPeakProfit(Base):
     peak_profit = Column(Float, default=0.0)                  # 历史最高浮盈金额
     peak_date = Column(Date, nullable=True)                   # 达到最高浮盈的日期
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class PriceHistory(Base):
+    """每日价格历史（用于均线/放量止损预警）"""
+    __tablename__ = "price_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(12), nullable=False, index=True)
+    date = Column(Date, nullable=False)                # 交易日期
+    close_price = Column(Float, nullable=False)        # 收盘价
+    volume = Column(Float, default=0.0)                # 成交量（股数）
+    open_price = Column(Float, default=0.0)            # 开盘价
+    high_price = Column(Float, default=0.0)            # 最高价
+    low_price = Column(Float, default=0.0)             # 最低价
+    created_at = Column(DateTime, server_default=func.now())
 
 
 class User(Base):

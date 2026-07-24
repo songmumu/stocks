@@ -2,13 +2,12 @@
   <div>
     <div class="page-header">
       <h2>自选管理</h2>
-      <el-button v-if="activeTab !== 'signals'" type="primary" @click="openAddDialog">+ 添加{{ activeTab === 'fund' ? '基金' : '股票' }}</el-button>
+      <el-button type="primary" @click="openAddDialog">+ 添加{{ activeTab === 'fund' ? '基金' : '股票' }}</el-button>
     </div>
 
     <el-tabs v-model="activeTab" class="pool-tabs">
       <el-tab-pane label="股票" name="stock" />
       <el-tab-pane label="基金" name="fund" />
-      <el-tab-pane label="关联指数" name="signals" />
     </el-tabs>
 
     <!-- 添加对话框 -->
@@ -50,8 +49,7 @@
       </template>
     </el-dialog>
 
-    <!-- 列表（股票 / 基金 tab） -->
-    <div v-if="activeTab !== 'signals'">
+    <!-- 列表 -->
     <div v-if="loading" class="page-loading">
       <div class="spinner"></div>
       <div>加载自选{{ activeTab === 'fund' ? '基金' : '股票' }}中...</div>
@@ -116,7 +114,7 @@
                   {{ Math.abs(quotes[stock.code].change).toFixed(2) }}%
                 </span>
               </div>
-              <!-- 股票 / ETF（场内）：开高低 + 换手率 -->
+              <!-- 场内基金：开高低 + 换手率 -->
               <div v-if="!isFund(stock) || hasIntraday(quotes[stock.code])" class="info-row">
                 <div class="info-item">
                   <span class="info-label">开</span>
@@ -162,130 +160,14 @@
         <div v-if="stock.notes" class="card-notes">📝 {{ stock.notes }}</div>
       </div>
     </div>
-    </div>
-
-    <!-- ─── 持仓信号 tab 内容（跟股票/基金 tab 同一级别，点击「持仓信号」tab 才显示） ─── -->
-    <div v-if="activeTab === 'signals'" class="signal-subsection">
-      <div class="subsection-header">
-        <span class="subsection-icon">🎯</span>
-        <span class="subsection-title">关联指数</span>
-        <span class="subsection-sub">为基金/ETF 关联宽基或行业指数 · 读取 10 年历史 PE/PB 分位</span>
-        <el-button size="small" style="margin-left: auto;" :loading="valLoading" @click="loadWatchlistSignals">
-          <span style="font-size:13px;">🔄 刷新</span>
-        </el-button>
-      </div>
-
-      <div v-if="valLoading" class="loading-row">
-        <div class="mini-spinner"></div>
-        <span>加载关联指数...</span>
-      </div>
-
-      <div v-else-if="!fundSignals.length" class="empty-state" style="padding: 40px 20px;">
-        <div class="empty-icon">🔗</div>
-        <div class="empty-title">尚未关联指数</div>
-        <div class="empty-desc">在自选中添加基金或 ETF 后，可在此为其关联宽基/行业指数</div>
-      </div>
-
-      <div v-else class="watchlist-grid">
-        <div
-          v-for="s in fundSignals"
-          :key="s.code"
-          class="wl-card"
-          :class="['band-' + s.band]"
-        >
-          <div v-if="s.type !== 'stock' && s.data_source === 'linked'" class="manual-bar">
-            <span class="manual-bar-tag">🔗 关联指数</span>
-            <span class="manual-bar-date">{{ s.index_name }} {{ s.index_code }}</span>
-            <el-button link size="small" style="margin-left:auto;font-size:11px;padding:0 6px;" @click="openLinkDialog(s)">换指数</el-button>
-          </div>
-
-          <div class="wl-top">
-            <div class="wl-title">
-              <span class="wl-badge-type" :class="'type-' + s.type">{{ typeLabel(s.type) }}</span>
-              <span class="wl-name">{{ s.name }}</span>
-            </div>
-            <span class="wl-badge-band" :class="'badge-' + s.band">{{ s.band_label }}</span>
-          </div>
-
-          <div v-if="s.type !== 'stock'" class="wl-signal">
-            <span class="wl-sig-label">历史分位</span>
-            <span class="wl-sig-val" :class="pctClass(s.signal)">{{ s.signal_label }}</span>
-          </div>
-
-          <div v-if="s.nav" class="wl-nav">
-            <span class="nav-lbl">基金净值</span>
-            <span class="nav-val">{{ s.nav }}</span>
-            <span class="nav-chg" :class="s.change_pct >= 0 ? 'up' : 'down'">
-              {{ s.change_pct >= 0 ? '+' : '' }}{{ s.change_pct }}%
-            </span>
-          </div>
-          <div v-else-if="s.price" class="wl-nav">
-            <span class="nav-lbl">{{ s.type === 'etf' ? 'ETF现价' : '现价' }}</span>
-            <span class="nav-val">{{ s.price }}</span>
-            <span v-if="s.change_pct != null" class="nav-chg" :class="s.change_pct >= 0 ? 'up' : 'down'">
-              {{ s.change_pct >= 0 ? '+' : '' }}{{ s.change_pct }}%
-            </span>
-          </div>
-
-          <div v-if="s.pe" class="wl-pe">
-            PE={{ s.pe }}&nbsp;&nbsp;PB={{ s.pb }}
-          </div>
-
-          <template v-if="s.type !== 'stock'">
-            <div v-if="s.data_source === 'none'" class="wl-fill-cta">
-              <el-button type="primary" size="small" @click="openLinkDialog(s)">🔗 关联指数</el-button>
-            </div>
-            <div v-if="s.data_source === 'linked' && s.signal == null" class="wl-note">
-              ⚠️ 关联的指数「{{ s.index_name }}」尚未填分位，请先去「指数估值」页填写
-            </div>
-            <div v-if="s.data_source === 'linked' && s.signal != null" class="wl-action" :class="'action-' + s.band">{{ s.action }}</div>
-            <div v-if="s.data_source === 'linked' && s.signal == null" class="wl-action" style="background:#f5f5f5;color:#999;">{{ s.action }}</div>
-          </template>
-        </div>
-      </div>
-    </div>
-
-    <!-- 关联指数弹窗 -->
-    <el-dialog v-model="linkDialog.visible" :title="'🔗 关联指数 · ' + linkDialog.name" width="520px" :close-on-click-modal="false">
-      <div class="link-tip">
-        选择「{{ linkDialog.name }}」追踪的宽基/行业指数，系统将自动读取该指数的 10 年分位数据作为信号。
-      </div>
-      <div class="link-list" v-if="availableIndices.length">
-        <div
-          v-for="idx in availableIndices"
-          :key="idx.code"
-          class="link-item"
-          :class="{ active: linkDialog.currentIndexCode === idx.code }"
-          @click="doLink(idx)"
-        >
-          <div class="link-item-left">
-            <span class="link-idx-name">{{ idx.name }}</span>
-            <span class="link-idx-code">{{ idx.code }}</span>
-            <span v-if="!idx.is_fixed" class="link-custom-tag">自选</span>
-          </div>
-          <div class="link-item-right">
-            <span v-if="idx.has_pct" class="link-pct-ok">✅ 已填 PE={{ idx.pe_pct }}%</span>
-            <span v-else class="link-pct-empty">❌ 未填分位</span>
-          </div>
-        </div>
-      </div>
-      <div v-else class="loading-row" style="padding: 20px;">
-        <div class="mini-spinner"></div> 加载指数列表...
-      </div>
-      <template #footer>
-        <el-button @click="linkDialog.visible = false">取消</el-button>
-        <el-button type="danger" plain v-if="linkDialog.currentIndexCode" @click="doUnlink">取消关联</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import { getWatchlist, addWatchlist, removeWatchlist, searchStocks, getRealtimeQuote, getStockHistory, getAvailableIndices, linkIndex } from '../api/index.js'
+import { getWatchlist, addWatchlist, removeWatchlist, searchStocks, getRealtimeQuote, getStockHistory } from '../api/index.js'
 
 const router = useRouter()
 
@@ -378,7 +260,6 @@ async function doSearch() {
     const { data } = await searchStocks(kw)
     const items = data.items || []
     searchResults.value = items
-    // 只有一条结果时自动选中填入名称（避免用户多步点击）
     if (items.length === 1 && addForm.value.name !== items[0].name) {
       addForm.value.name = items[0].name
     }
@@ -419,87 +300,8 @@ function goDetail(id) {
   router.push(`/stocks/${id}`)
 }
 
-// ─── 持仓信号子模块（自选管理下的子模块，仅基金选项卡显示） ───
-const watchlistSignals = ref([])
-const valLoading       = ref(false)
-const availableIndices = ref([])
-
-// 关联指数 tab 下的数据：包含场外基金和 ETF
-const fundSignals = computed(() => {
-  return watchlistSignals.value.filter(s => s.type === 'fund' || s.type === 'etf')
-})
-
-// 关联指数弹窗
-const linkDialog = ref({
-  visible: false,
-  id: null, code: '', name: '',
-  currentIndexCode: null,
-})
-
-function typeLabel(t) { return ({ fund: '基金', etf: 'ETF', stock: '个股' }[t] ?? t) }
-
-function pctClass(v) {
-  if (v == null) return 'neutral'
-  if (v < 30) return 'low'
-  if (v > 70) return 'high'
-  return 'mid'
-}
-
-async function loadWatchlistSignals() {
-  valLoading.value = true
-  try {
-    const { data } = await axios.get('/api/valuation/watchlist/signals')
-    watchlistSignals.value = data.watchlist_signals || []
-  } catch (e) {
-    console.error('加载持仓信号失败', e)
-    watchlistSignals.value = []
-  } finally {
-    valLoading.value = false
-  }
-}
-
-async function loadAvailableIndices() {
-  try {
-    const { data } = await getAvailableIndices()
-    availableIndices.value = data || []
-  } catch { availableIndices.value = [] }
-}
-
-async function openLinkDialog(s) {
-  linkDialog.value = {
-    visible: true,
-    id: s.id, code: s.code, name: s.name,
-    currentIndexCode: s.index_code || null,
-  }
-  if (!availableIndices.value.length) await loadAvailableIndices()
-}
-
-async function doLink(idx) {
-  try {
-    await linkIndex(linkDialog.value.id, idx.code)
-    ElMessage.success(`已关联「${idx.name}」`)
-    linkDialog.value.visible = false
-    loadWatchlistSignals()
-  } catch (e) {
-    ElMessage.error('关联失败：' + (e.message || e))
-  }
-}
-
-async function doUnlink() {
-  if (!confirm(`取消「${linkDialog.value.name}」的指数关联？`)) return
-  try {
-    await axios.post(`/api/watchlist/${linkDialog.value.id}/unlink-index`)
-    ElMessage.success('已取消关联')
-    linkDialog.value.visible = false
-    loadWatchlistSignals()
-  } catch (e) {
-    ElMessage.error('取消关联失败：' + (e.message || e))
-  }
-}
-
 onMounted(() => {
   loadWatchlist()
-  loadWatchlistSignals()
 })
 </script>
 
@@ -712,183 +514,4 @@ onMounted(() => {
   animation: spin .8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-
-/* ── 持仓信号子模块（自选管理 → 基金下的子区块） ── */
-.signal-subsection {
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px dashed #e8e8ee;
-}
-.subsection-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.subsection-icon  { font-size: 16px; }
-.subsection-title { font-size: 15px; font-weight: 600; color: #1a1a2e; }
-.subsection-sub   { font-size: 12px; color: #999; margin-left: 4px; }
-
-.loading-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 60px 0;
-  color: #999;
-  font-size: 13px;
-}
-
-.watchlist-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
-}
-.wl-card {
-  background: #fff;
-  border: 1px solid #f0f0f0;
-  border-radius: 8px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  transition: all .15s;
-  min-height: 130px;
-}
-.wl-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.06); transform: translateY(-1px); }
-.wl-card.band-extreme_low  { border-left: 3px solid #1565c0; }
-.wl-card.band-low          { border-left: 3px solid #2e7d32; }
-.wl-card.band-normal       { border-left: 3px solid #f57f17; }
-.wl-card.band-high         { border-left: 3px solid #e65100; }
-.wl-card.band-extreme_high { border-left: 3px solid #c62828; }
-.wl-card.band-unknown      { border-left: 3px solid #9e9e9e; }
-
-.manual-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #f0f7ff;
-  border: 1px solid #bbdefb;
-  border-radius: 4px;
-  padding: 3px 8px;
-  font-size: 11px;
-  color: #1565c0;
-  margin-bottom: 4px;
-}
-.manual-bar-tag { font-weight: 600; }
-.manual-bar-date { color: #555; }
-
-.wl-top { display: flex; justify-content: space-between; align-items: center; }
-.wl-title { display: flex; align-items: center; gap: 6px; }
-.wl-badge-type {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 10px;
-}
-.type-fund  { background: #e8f5e9; color: #2e7d32; }
-.type-etf   { background: #e3f2fd; color: #1565c0; }
-.type-stock { background: #f5f5f5; color: #888; }
-.wl-name { font-size: 14px; font-weight: 600; color: #1a1a2e; }
-.wl-badge-band {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 12px;
-}
-.badge-extreme_low  { background: #e3f2fd; color: #1565c0; }
-.badge-low          { background: #e8f5e9; color: #2e7d32; }
-.badge-normal       { background: #fff8e1; color: #f57f17; }
-.badge-high         { background: #fff3e0; color: #e65100; }
-.badge-extreme_high { background: #fce4ec; color: #c62828; }
-.badge-unknown      { background: #f5f5f5; color: #9e9e9e; }
-
-.wl-signal { display: flex; align-items: baseline; gap: 6px; }
-.wl-sig-label { font-size: 12px; color: #999; }
-.wl-sig-val {
-  font-size: 22px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.wl-sig-val.low  { color: #2e7d32; }
-.wl-sig-val.mid  { color: #f57f17; }
-.wl-sig-val.high { color: #c62828; }
-.wl-sig-val.neutral { color: #9e9e9e; }
-
-.wl-nav { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
-.nav-lbl { color: #999; }
-.nav-val { font-size: 16px; font-weight: 600; color: #1a1a2e; }
-.nav-chg { font-weight: 600; }
-.nav-chg.up   { color: #ef232a; }
-.nav-chg.down { color: #14b143; }
-
-.wl-pe { font-size: 12px; color: #666; }
-
-.wl-fill-cta { margin-top: auto; }
-.wl-fill-cta .el-button { width: 100%; }
-
-.wl-note {
-  font-size: 12px;
-  color: #e65100;
-  background: #fff3e0;
-  border-radius: 4px;
-  padding: 6px 8px;
-  line-height: 1.5;
-}
-
-.wl-action {
-  font-size: 13px;
-  font-weight: 600;
-  text-align: center;
-  border-radius: 4px;
-  padding: 6px;
-  margin-top: auto;
-}
-.action-extreme_low  { background: #e3f2fd; color: #1565c0; }
-.action-low          { background: #e8f5e9; color: #2e7d32; }
-.action-normal       { background: #fff8e1; color: #f57f17; }
-.action-high         { background: #fff3e0; color: #e65100; }
-.action-extreme_high { background: #fce4ec; color: #c62828; }
-
-/* 关联指数弹窗 */
-.link-tip {
-  font-size: 13px;
-  color: #555;
-  background: #f0f7ff;
-  border: 1px solid #bbdefb;
-  border-radius: 6px;
-  padding: 10px 14px;
-  margin-bottom: 16px;
-  line-height: 1.6;
-}
-.link-list {
-  max-height: 400px;
-  overflow-y: auto;
-}
-.link-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 12px;
-  border: 1px solid #e8e8ee;
-  border-radius: 6px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  transition: all .15s;
-}
-.link-item:hover { background: #f0f7ff; border-color: #bbdefb; }
-.link-item.active { background: #e3f2fd; border-color: #1565c0; }
-.link-item-left { display: flex; align-items: center; gap: 8px; }
-.link-idx-name { font-size: 14px; font-weight: 600; color: #1a1a2e; }
-.link-idx-code { font-size: 11px; color: #999; font-family: monospace; }
-.link-custom-tag {
-  font-size: 10px;
-  background: #fff3e0;
-  color: #e65100;
-  border-radius: 3px;
-  padding: 0 5px;
-}
-.link-item-right { font-size: 12px; }
-.link-pct-ok    { color: #2e7d32; }
-.link-pct-empty { color: #999; }
 </style>

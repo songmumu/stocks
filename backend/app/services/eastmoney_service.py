@@ -205,16 +205,16 @@ def _fetch_fund_nav_history(code: str, days: int = 120) -> list[dict]:
 
 
 def fetch_stock_history(code: str, days: int = 120) -> list[dict]:
-    """个股历史日 K 线（前复权）。场外基金用天天基金净值数据。"""
+    """个股历史日 K 线（不复权）。场外基金用天天基金净值数据。"""
     # 场外基金：用天天基金网净值
     if _is_fund_code(code):
         return _fetch_fund_nav_history(code, days)
 
-    # 股票/场内基金：用腾讯K线
+    # 股票/场内基金：用腾讯K线(不复权 bfq，与手机券商 App 价格口径一致)
     secid = _to_tencent_secid(code)
     url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
     params = {
-        "param": f"{secid},day,,,{max(days, 60)},qfq",
+        "param": f"{secid},day,,,{max(days, 60)},bfq",
     }
     try:
         data = _get_json(url, params)
@@ -226,7 +226,7 @@ def fetch_stock_history(code: str, days: int = 120) -> list[dict]:
 
 
 def fetch_index_history(index_code: str, days: int = 120) -> list[dict]:
-    """大盘指数历史日 K 线"""
+    """大盘指数历史日 K 线（不复权）"""
     secid_map = {
         "sh": "sh000001",
         "sz": "sz399001",
@@ -442,6 +442,99 @@ def _to_tencent_secid(code: str) -> str:
     if code.startswith(("60", "68", "9", "5")):
         return "sh" + code
     return "sz" + code
+
+
+# ─────────── 价格历史入库（均线/放量预警用）──────────────────────────
+
+def fetch_price_history_3years(code: str) -> list[dict]:
+    """
+    拉取近3年日K线（不复权），用于均线止损/放量预警计算。
+    腾讯接口每次最多返回约350条，3年约750条交易日，分两次请求。
+    """
+    secid = _to_tencent_secid(code)
+    url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    results = []
+
+    for param_suffix in ["bfq", "bfq"]:
+        try:
+            params = {
+                "param": f"{secid},day,,,350,{param_suffix}",
+            }
+            data = _get_json(url, params)
+            info = data.get("data", {}).get(secid, {})
+            # 优先取不复权 day，其次取 qfqday
+            klines = info.get("day") or info.get("qfqday") or []
+            parsed = _parse_klines(klines)
+            if parsed:
+                results.extend(parsed)
+            break  # 成功就跳出
+        except Exception:
+            continue
+
+    if not results:
+        return []
+
+    # 去重（按日期），保留最新（腾讯接口可能重叠）
+    seen, unique = set(), []
+    for k in reversed(results):
+        if k["date"] not in seen:
+            seen.add(k["date"])
+            unique.append(k)
+    unique.reverse()  # 时间正序
+    return unique
+
+
+def save_price_history(db_session, code: str, bars: list[dict]) -> int:
+    """
+    将 K线数据批量写入 price_history 表。
+    已存在的 (code, date) 跳过（upsert 逻辑）。
+    返回新增记录数。
+    """
+    from app.models import PriceHistory
+    from datetime import datetime
+
+    inserted = 0
+    for bar in bars:
+        date_str = bar["date"]
+        try:
+            trade_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            continue
+
+        existing = db_session.query(PriceHistory).filter(
+            PriceHistory.code == code,
+            PriceHistory.date == trade_date,
+        ).first()
+
+        if existing:
+            # 更新当日数据（价格可能修正）
+            existing.close_price = bar["close"]
+            existing.open_price = bar["open"]
+            existing.high_price = bar["high"]
+            existing.low_price = bar["low"]
+            existing.volume = bar.get("volume", 0)
+        else:
+            db_session.add(PriceHistory(
+                code=code,
+                date=trade_date,
+                close_price=bar["close"],
+                open_price=bar.get("open", bar["close"]),
+                high_price=bar.get("high", bar["close"]),
+                low_price=bar.get("low", bar["close"]),
+                volume=bar.get("volume", 0),
+            ))
+            inserted += 1
+
+    db_session.commit()
+    return inserted
+
+
+def fetch_and_save_price_history(db_session, code: str) -> int:
+    """拉取3年K线并存入数据库，返回新增条数。"""
+    bars = fetch_price_history_3years(code)
+    if not bars:
+        return 0
+    return save_price_history(db_session, code, bars)
 
 
 # ── 旧 API 名兼容（避免路由器报 ImportError） ──

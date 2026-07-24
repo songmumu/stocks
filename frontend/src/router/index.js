@@ -1,14 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { getToken, isAdmin } from '../api'
-import Dashboard from '../views/Dashboard.vue'
-import StockPool from '../views/StockPool.vue'
-import StockDetail from '../views/StockDetail.vue'
-import TradeRecords from '../views/TradeRecords.vue'
-import IndexValuation from '../views/IndexValuation.vue'
-import Portfolio from '../views/Portfolio.vue'
-import Admin from '../views/Admin.vue'
-import Login from '../views/Login.vue'
-import AdminLogin from '../views/AdminLogin.vue'
+
+// 路由懒加载：每个页面独立 chunk，访问时才加载
+const Dashboard    = () => import(/* webpackChunkName: "dashboard" */ '../views/Dashboard.vue')
+const StockPool   = () => import(/* webpackChunkName: "stock-pool" */ '../views/StockPool.vue')
+const StockDetail = () => import(/* webpackChunkName: "stock-detail" */ '../views/StockDetail.vue')
+const TradeRecords= () => import(/* webpackChunkName: "trade-records" */ '../views/TradeRecords.vue')
+const Portfolio   = () => import(/* webpackChunkName: "portfolio" */ '../views/Portfolio.vue')
+const MyReturns  = () => import(/* webpackChunkName: "my-returns" */ '../views/MyReturns.vue')
+const Admin      = () => import(/* webpackChunkName: "admin" */ '../views/Admin.vue')
+const Login      = () => import(/* webpackChunkName: "login" */ '../views/Login.vue')
+const AdminLogin = () => import(/* webpackChunkName: "admin-login" */ '../views/AdminLogin.vue')
 
 const routes = [
   { path: '/login',           name: 'login',           component: Login,           meta: { title: '登录', public: true } },
@@ -17,8 +19,8 @@ const routes = [
   { path: '/stocks',          name: 'stocks',          component: StockPool,       meta: { title: '自选', requiresAuth: true } },
   { path: '/stocks/:id',      name: 'stock-detail',    component: StockDetail,     meta: { title: '股票详情', requiresAuth: true } },
   { path: '/trades',          name: 'trades',          component: TradeRecords,    meta: { title: '交易记录', requiresAuth: true } },
-  { path: '/index-valuation', name: 'index-valuation', component: IndexValuation,  meta: { title: '指数估值', requiresAuth: true } },
   { path: '/portfolio',       name: 'portfolio',       component: Portfolio,       meta: { title: '我的持仓', requiresAuth: true } },
+  { path: '/my-returns',     name: 'my-returns',     component: MyReturns,     meta: { title: '我的收益', requiresAuth: true } },
   { path: '/anyuci',          name: 'admin',           component: Admin,           meta: { title: '后台', requiresAuth: true, requiresAdmin: true, hidden: true } },
 ]
 
